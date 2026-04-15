@@ -9,7 +9,7 @@ source "$HOME/github/pdmack/bash-tools/load.sh"
 
 ## Setup
 
-Copy `site.sh.example` (or create `site.sh`) for machine-specific config — CDPATH, etc. It's gitignored.
+Copy `site.sh.example` to `site.sh` for machine-specific config — CDPATH, key paths, etc. It's gitignored and excluded from `tools` output.
 
 ```bash
 # site.sh

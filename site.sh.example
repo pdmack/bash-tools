@@ -1,2 +1,8 @@
-# local.sh - machine-specific config, copy to local.sh (gitignored)
+# site.sh - machine-specific config, sourced by load.sh (gitignored, not a tool)
+# Copy this to site.sh and customise for your machine.
+
+# Directories to search when using cd <name> or cr <name>
 export CDPATH=".:$HOME/github/pdmack:$HOME/fun-projects:$HOME"
+
+# Path to your secondary SSH key, used by: ssha gl
+# export SSHA_GL_KEY="$HOME/.ssh/id_mykey"

@@ -1,13 +1,16 @@
-# memback - back up Claude project memories to $MEMBACK_DEST/claude-memories
+# memback - back up Claude project memories and global config to $MEMBACK_DEST
 # Usage: memback [--dry-run]
 #
 # Setup (site.sh):
 #   export MEMBACK_DEST="$HOME/your-backup-repo"   # root of your backup git repo
 #
 # What it does:
-#   Copies all *.md files from ~/.claude/projects/*/memory/ into
-#   $MEMBACK_DEST/claude-memories/<project-name>/, then commits and pushes.
-#   Safe to run repeatedly — only commits when something changed.
+#   1. Copies ~/.claude/CLAUDE.md and ~/.claude/settings.json into
+#      $MEMBACK_DEST/claude-global/
+#   2. Copies all *.md files from ~/.claude/projects/*/memory/ into
+#      $MEMBACK_DEST/claude-memories/<project-name>/
+#   Then commits and pushes. Safe to run repeatedly — only commits when
+#   something changed.
 #
 # Project naming:
 #   Claude stores projects under ~/.claude/projects/ using a key that encodes
@@ -72,8 +75,10 @@ memback() {
         echo "memback: set MEMBACK_DEST in site.sh to your backup repo path" >&2
         return 1
     fi
-    local dest="$skills_dir/claude-memories"
-    local claude_projects="$HOME/.claude/projects"
+    local dest_memories="$skills_dir/claude-memories"
+    local dest_global="$skills_dir/claude-global"
+    local claude_dir="$HOME/.claude"
+    local claude_projects="$claude_dir/projects"
 
     if [[ ! -d "$skills_dir" ]]; then
         echo "memback: MEMBACK_DEST directory not found: $skills_dir" >&2
@@ -105,6 +110,19 @@ memback() {
 
     local copied=0
 
+    # 1. Global claude config (~/.claude/*.md and settings.json)
+    while IFS= read -r f; do
+        local dst="$dest_global/$(basename "$f")"
+        if $dry_run; then
+            echo "  $f → $dst"
+        else
+            mkdir -p "$dest_global"
+            cp "$f" "$dst"
+        fi
+        (( copied++ ))
+    done < <(find "$claude_dir" -maxdepth 1 -type f \( -name "*.md" -o -name "settings.json" \) 2>/dev/null)
+
+    # 2. Project memories (~/.claude/projects/*/memory/*.md)
     for memory_dir in "$claude_projects"/*/memory; do
         [[ -d "$memory_dir" ]] || continue
 
@@ -115,9 +133,8 @@ memback() {
         local project_name
         project_name=$(_memback_project_name "$encoded")
 
-        local target="$dest/$project_name"
+        local target="$dest_memories/$project_name"
 
-        # Copy memory files
         while IFS= read -r f; do
             local rel="${f#$memory_dir/}"
             local dst="$target/$rel"
@@ -137,15 +154,18 @@ memback() {
     fi
 
     if (( copied == 0 )); then
-        echo "memback: no memory files found"
+        echo "memback: no files found"
         return 0
     fi
 
     echo "copied $copied file(s)"
 
     # Commit and push
-    if ! git -C "$skills_dir" diff --quiet || [[ -n "$(git -C "$skills_dir" ls-files --others --exclude-standard claude-memories/)" ]]; then
-        git -C "$skills_dir" add claude-memories/
+    local changed=false
+    ! git -C "$skills_dir" diff --quiet && changed=true
+    [[ -n "$(git -C "$skills_dir" ls-files --others --exclude-standard claude-memories/ claude-global/)" ]] && changed=true
+    if $changed; then
+        git -C "$skills_dir" add claude-memories/ claude-global/
         git -C "$skills_dir" commit -m "memback: $(date '+%Y-%m-%d %H:%M')"
         git -C "$skills_dir" push
     else

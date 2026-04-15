@@ -1,17 +1,37 @@
 # memback - back up Claude project memories to $MEMBACK_DEST/claude-memories
 # Usage: memback [--dry-run]
-# Requires: MEMBACK_DEST set in site.sh (path to your backup git repo)
 #
-# Project naming: Claude encodes project paths by replacing '/' with '-', and
-# directory names may also contain '-', making them indistinguishable in the key.
-# We probe the filesystem to find the deepest existing parent prefix; the
-# remainder becomes the project name (e.g. "physics-study-usa", not "usa").
-# If the project directory no longer exists the full encoded string is used.
-# Collision risk: two projects whose dirs resolve to the same name will share a
-# folder — rename one if that happens.
+# Setup (site.sh):
+#   export MEMBACK_DEST="$HOME/skills"   # root of your backup git repo
 #
-# Safety: memback refuses to run if the backup repo is not confirmed private
-# (checked via gh CLI).
+# What it does:
+#   Copies all *.md files from ~/.claude/projects/*/memory/ into
+#   $MEMBACK_DEST/claude-memories/<project-name>/, then commits and pushes.
+#   Safe to run repeatedly — only commits when something changed.
+#
+# Project naming:
+#   Claude stores projects under ~/.claude/projects/ using a key that encodes
+#   the full project path with '/' replaced by '-'. For example:
+#     /home/alice/github/myorg/physics-study-usa
+#     → -home-alice-github-myorg-physics-study-usa
+#   Since directory names can also contain '-', the separator and the name
+#   character are identical and can't be distinguished textually. memback
+#   resolves this by probing the filesystem: it walks $HOME looking for the
+#   deepest existing parent directory, then uses the remainder as the project
+#   name. This gives "physics-study-usa" rather than just "usa".
+#
+#   Caveat: if the project directory has been deleted or moved, the walk stops
+#   early and the name falls back to the full encoded string (still usable,
+#   just less clean). If two active projects share the same final directory
+#   name they will collide into one folder — rename one to disambiguate.
+#
+# Privacy / safety:
+#   Memories may contain sensitive context. memback requires the backup
+#   destination to be a hosted git repo (must have a remote origin configured).
+#   For GitHub remotes it verifies the repo is private via the gh CLI and
+#   refuses to run if it is not. For other hosts (GitLab, Gitea, etc.) it
+#   cannot verify visibility automatically and emits a warning instead —
+#   it is your responsibility to ensure the repo is private.
 
 _memback_project_name() {
     # Reconstruct the project directory name from the encoded portion of a
@@ -60,17 +80,27 @@ memback() {
         return 1
     fi
 
-    # Safety: refuse to back up memories to a public repo
-    if ! command -v gh &>/dev/null; then
-        echo "memback: gh CLI required to verify repo visibility" >&2
+    # Safety: backup destination must be a real remote repo, and private if on GitHub
+    local remote_url
+    remote_url=$(git -C "$skills_dir" remote get-url origin 2>/dev/null)
+    if [[ -z "$remote_url" ]]; then
+        echo "memback: $skills_dir has no git remote — must be a hosted repo" >&2
         return 1
     fi
-    local is_private
-    is_private=$(cd "$skills_dir" && gh repo view --json isPrivate -q '.isPrivate' 2>/dev/null)
-    if [[ "$is_private" != "true" ]]; then
-        echo "memback: backup repo must be private" >&2
-        echo "  check: cd $skills_dir && gh repo view --json isPrivate" >&2
-        return 1
+    if [[ "$remote_url" == *github.com* ]]; then
+        if ! command -v gh &>/dev/null; then
+            echo "memback: gh CLI required to verify GitHub repo visibility" >&2
+            return 1
+        fi
+        local is_private
+        is_private=$(cd "$skills_dir" && gh repo view --json isPrivate -q '.isPrivate' 2>/dev/null)
+        if [[ "$is_private" != "true" ]]; then
+            echo "memback: backup repo must be private" >&2
+            echo "  check: cd $skills_dir && gh repo view --json isPrivate" >&2
+            return 1
+        fi
+    else
+        echo "memback: warning: cannot verify visibility for non-GitHub remote — ensure $remote_url is private" >&2
     fi
 
     local copied=0

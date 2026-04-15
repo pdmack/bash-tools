@@ -1,12 +1,12 @@
-# cdpath - manage CDPATH entries in local.sh
+# cdpath - manage CDPATH entries in site.sh
 # Usage: cdpath show               list current CDPATH entries
 #        cdpath scan               suggest candidate dirs from home
-#        cdpath add <dir>          add a dir to CDPATH in local.sh
-#        cdpath rm <dir>           remove a dir from CDPATH in local.sh
+#        cdpath add <dir>          add a dir to CDPATH in site.sh
+#        cdpath rm <dir>           remove a dir from CDPATH in site.sh
 cdpath() {
     local cmd="${1:-show}"
     local local_sh
-    local_sh="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/local.sh"
+    local_sh="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/site.sh"
 
     case "$cmd" in
         show)

@@ -9,10 +9,10 @@ source "$HOME/github/pdmack/bash-tools/load.sh"
 
 ## Setup
 
-Copy `local.sh.example` (or create `local.sh`) for machine-specific config — CDPATH, etc. It's gitignored.
+Copy `site.sh.example` (or create `site.sh`) for machine-specific config — CDPATH, etc. It's gitignored.
 
 ```bash
-# local.sh
+# site.sh
 export CDPATH=".:$HOME/github/pdmack:$HOME/work:$HOME"
 ```
 
@@ -63,7 +63,7 @@ export CDPATH=".:$HOME/github/pdmack:$HOME/work:$HOME"
 ### Navigation
 | Tool | Description |
 |------|-------------|
-| `cdpath <show\|scan\|add\|rm>` | manage CDPATH entries in `local.sh` |
+| `cdpath <show\|scan\|add\|rm>` | manage CDPATH entries in `site.sh` |
 | `mkcd <dir>` | mkdir + cd in one step |
 | `up [n]` | go up n directory levels |
 

@@ -34,6 +34,6 @@ source "$_bash_tools_dir/ksec.sh"
 source "$_bash_tools_dir/tools.sh"
 
 # machine-specific overrides (gitignored)
-[[ -f "$_bash_tools_dir/local.sh" ]] && source "$_bash_tools_dir/local.sh"
+[[ -f "$_bash_tools_dir/site.sh" ]] && source "$_bash_tools_dir/site.sh"
 
 unset _bash_tools_dir

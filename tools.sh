@@ -6,7 +6,7 @@ tools() {
     echo "bash-tools:"
     echo
     for f in "$dir"/*.sh; do
-        [[ "$(basename "$f")" == "load.sh" || "$(basename "$f")" == "tools.sh" ]] && continue
+        [[ "$(basename "$f")" == "load.sh" || "$(basename "$f")" == "tools.sh" || "$(basename "$f")" == "site.sh" ]] && continue
         # grab the first comment line and the Usage line
         local desc usage
         desc=$(grep -m1 '^# [^!]' "$f" | sed 's/^# //')

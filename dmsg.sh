@@ -40,9 +40,9 @@ dmsg() {
         cmd+=(-H)
     fi
 
-    # retry with sudo if permission denied
+    # retry with sudo if permission denied (kernel log access restricted by default)
     if ! "${cmd[@]}" 2>/dev/null; then
-        echo "dmsg: retrying with sudo..."
+        echo "dmsg: sudo required — kernel log access is restricted on this host" >&2
         sudo "${cmd[@]}"
     fi
 }

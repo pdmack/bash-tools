@@ -1,5 +1,7 @@
 # apts - focused apt search, ranked by relevance
 # Usage: apts <query> [max]   (max results, default 20)
+# Runs "sudo apt-get update" if package lists are older than APTS_UPDATE_TTL
+# seconds (default 3600). Set APTS_UPDATE_TTL=0 to always update.
 apts() {
     local query="${1:-}"
     local max="${2:-20}"
@@ -7,6 +9,16 @@ apts() {
     if [[ -z "$query" ]]; then
         echo "Usage: apts <query> [max]" >&2
         return 1
+    fi
+
+    # Auto-update if lists are stale
+    local ttl="${APTS_UPDATE_TTL:-3600}"
+    local lists_mtime now
+    lists_mtime=$(stat -c %Y /var/lib/apt/lists/ 2>/dev/null || echo 0)
+    now=$(date +%s)
+    if (( now - lists_mtime > ttl )); then
+        echo "apts: sudo required — refreshing package lists (last updated >$(( ttl / 60 ))m ago)" >&2
+        sudo apt-get update -qq
     fi
 
     # apt-cache search gives clean "name - description" output

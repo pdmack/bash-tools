@@ -8,4 +8,4 @@ export CDPATH=".:$HOME/github/pdmack:$HOME/fun-projects:$HOME"
 # export SSHA_GL_KEY="$HOME/.ssh/id_mykey"
 
 # Path to your backup git repo root, used by: memback
-# export MEMBACK_DEST="$HOME/skills"
+# export MEMBACK_DEST="$HOME/your-backup-repo"

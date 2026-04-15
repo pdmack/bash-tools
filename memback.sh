@@ -2,7 +2,7 @@
 # Usage: memback [--dry-run]
 #
 # Setup (site.sh):
-#   export MEMBACK_DEST="$HOME/skills"   # root of your backup git repo
+#   export MEMBACK_DEST="$HOME/your-backup-repo"   # root of your backup git repo
 #
 # What it does:
 #   Copies all *.md files from ~/.claude/projects/*/memory/ into

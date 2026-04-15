@@ -1,0 +1,2 @@
+# local.sh - machine-specific config, copy to local.sh (gitignored)
+export CDPATH=".:$HOME/github/pdmack:$HOME/fun-projects:$HOME"

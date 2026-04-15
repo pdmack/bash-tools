@@ -1,0 +1,17 @@
+# histignore.txt - exact commands stripped by hclean --trim
+# One entry per line. Lines starting with # are comments.
+cd
+cd ..
+cd -
+cd ~
+ls
+ll
+la
+l
+exit
+pwd
+clear
+history
+history -a
+hisotry
+hisotry -a

@@ -6,3 +6,6 @@ export CDPATH=".:$HOME/github/pdmack:$HOME/fun-projects:$HOME"
 
 # Path to your secondary SSH key, used by: ssha gl
 # export SSHA_GL_KEY="$HOME/.ssh/id_mykey"
+
+# Path to your backup git repo root, used by: memback
+# export MEMBACK_DEST="$HOME/skills"

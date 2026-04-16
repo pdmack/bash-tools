@@ -21,6 +21,7 @@ pss() {
     }
 
     $11 ~ /^\[/ { next }
+    /function shorten/ { next }
 
     {
         user=$1; pid=$2; cpu=$3; mem=$4

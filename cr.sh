@@ -8,13 +8,18 @@ cr() {
     if [[ -z "$query" ]]; then
         match="$(pwd)"
     else
-        # derive search dirs from CDPATH, falling back to sensible defaults
-        local search_dirs=()
+        # derive search dirs from CDPATH, resolving relative entries against $HOME
+        local raw_dirs=()
         if [[ -n "$CDPATH" ]]; then
-            IFS=: read -ra search_dirs <<< "$CDPATH"
+            IFS=: read -ra raw_dirs <<< "$CDPATH"
         else
-            search_dirs=("$HOME/github/pdmack" "$HOME/fun-projects" "$HOME")
+            raw_dirs=("$HOME/github/pdmack" "$HOME/fun-projects" "$HOME")
         fi
+        local search_dirs=()
+        for d in "${raw_dirs[@]}"; do
+            [[ "$d" = /* ]] && search_dirs+=("$d") || search_dirs+=("$HOME/${d#./}")
+        done
+
         local matches=() seen_real=()
         for dir in "${search_dirs[@]}"; do
             [[ -d "$dir" ]] || continue

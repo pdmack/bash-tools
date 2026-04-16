@@ -1,17 +1,17 @@
 # hclean - clean and rewrite bash history
-# Usage: hclean [--subs] [--trim] [--dry-run]
-#   --subs     apply bash-tools rewrites (cr, ssha, etc.)
-#   --trim     remove boring commands listed in histignore.txt
-#   --dry-run  show what would change without writing
+# Usage: hclean [-s|--subs] [-t|--trim] [-n|--dry-run]
+#   -s|--subs     apply bash-tools rewrites (cr, ssha, etc.)
+#   -t|--trim     remove boring commands listed in histignore.txt
+#   -n|--dry-run  show what would change without writing
 hclean() {
     local do_subs=false do_trim=false dry_run=false
 
     for arg in "$@"; do
         case "$arg" in
-            --subs)    do_subs=true ;;
-            --trim)    do_trim=true ;;
-            --dry-run) dry_run=true ;;
-            *) echo "Usage: hclean [--subs] [--trim] [--dry-run]" >&2; return 1 ;;
+            -s|--subs)    do_subs=true ;;
+            -t|--trim)    do_trim=true ;;
+            -n|--dry-run) dry_run=true ;;
+            *) echo "Usage: hclean [-s|--subs] [-t|--trim] [-n|--dry-run]" >&2; return 1 ;;
         esac
     done
 

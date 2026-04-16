@@ -16,7 +16,7 @@ psk() {
     done
 
     if [[ -z "$query" ]]; then
-        echo "Usage: psk <filter> [-9] [all]" >&2
+        echo "Usage: psk <filter> [-15] [all]" >&2
         return 1
     fi
 

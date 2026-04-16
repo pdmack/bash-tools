@@ -1,21 +1,21 @@
 # cdf - find and cd to a directory by name
-# Usage: cdf <query> [root] [--hidden]
-#   root      search root, defaults to . (current directory)
-#   --hidden  include hidden directories (excluded by default)
+# Usage: cdf <query> [root] [-h|--hidden]
+#   root        search root, defaults to . (current directory)
+#   -h|--hidden include hidden directories (excluded by default)
 # Warns strongly if root is / or a first-tier system directory.
 cdf() {
     local query="" root="." hidden=false
 
     for arg in "$@"; do
         case "$arg" in
-            --hidden) hidden=true ;;
+            -h|--hidden) hidden=true ;;
             -*) echo "cdf: unknown option '$arg'" >&2; return 1 ;;
             *)  [[ -z "$query" ]] && query="$arg" || root="$arg" ;;
         esac
     done
 
     if [[ -z "$query" ]]; then
-        echo "Usage: cdf <query> [root] [--hidden]" >&2
+        echo "Usage: cdf <query> [root] [-h|--hidden]" >&2
         return 1
     fi
 

@@ -1,5 +1,5 @@
 # memback - back up Claude project memories and global config to $MEMBACK_DEST
-# Usage: memback [--dry-run]
+# Usage: memback [-n|--dry-run]
 #
 # Setup (site.sh):
 #   export MEMBACK_DEST="$HOME/your-backup-repo"   # root of your backup git repo
@@ -68,7 +68,7 @@ _memback_project_name() {
 
 memback() {
     local dry_run=false
-    [[ "${1:-}" == "--dry-run" ]] && dry_run=true
+    [[ "${1:-}" == "--dry-run" || "${1:-}" == "-n" ]] && dry_run=true
 
     local skills_dir="${MEMBACK_DEST:-}"
     if [[ -z "$skills_dir" ]]; then

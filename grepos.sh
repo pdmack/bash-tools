@@ -1,15 +1,15 @@
 # grepos - scan git repos from CDPATH and show main branch status
-# Usage: grepos [--fetch] [--sync]
-#   --fetch   run git fetch --all on each repo before checking status
-#   --sync    offer to sync fork mains (repos with an 'upstream' remote)
+# Usage: grepos [-f|--fetch] [-s|--sync]
+#   -f|--fetch  run git fetch --all on each repo before checking status
+#   -s|--sync   offer to sync fork mains (repos with an 'upstream' remote)
 grepos() {
     local do_fetch=false do_sync=false
 
     for arg in "$@"; do
         case "$arg" in
-            --fetch) do_fetch=true ;;
-            --sync)  do_sync=true ;;
-            *) echo "Usage: grepos [--fetch] [--sync]" >&2; return 1 ;;
+            -f|--fetch) do_fetch=true ;;
+            -s|--sync)  do_sync=true ;;
+            *) echo "Usage: grepos [-f|--fetch] [-s|--sync]" >&2; return 1 ;;
         esac
     done
 

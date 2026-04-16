@@ -1,14 +1,15 @@
 # psk - show matching processes and kill with confirmation
-# Usage: psk <filter> [-9] [all]
+# Usage: psk <filter> [-15] [all]
 #   filter  substring match on user or command
-#   -9      use SIGKILL instead of SIGTERM
+#   -15     use SIGTERM instead of SIGKILL
 #   all     kill all matches without picking; still prompts for confirmation
 psk() {
-    local query="" sig="-15" kill_all=false
+    local query="" sig="-9" kill_all=false
 
     for arg in "$@"; do
         case "$arg" in
             -9)  sig="-9" ;;
+            -15) sig="-15" ;;
             all) kill_all=true ;;
             *)   query="$arg" ;;
         esac
@@ -30,15 +31,14 @@ psk() {
         return 0
     fi
 
-    printf "%-10s %6s %5s %5s  %s\n" "USER" "PID" "%CPU" "%MEM" "COMMAND"
     local i
-    for i in "${!lines[@]}"; do
-        if $kill_all; then
-            echo "  ${lines[$i]}"
-        else
-            printf "  [%d] %s\n" "$i" "${lines[$i]}"
-        fi
-    done
+    if $kill_all; then
+        printf "    %-10s %6s %5s %5s  %s\n" "USER" "PID" "%CPU" "%MEM" "COMMAND"
+        for i in "${!lines[@]}"; do echo "    ${lines[$i]}"; done
+    else
+        printf "  [#] %-10s %6s %5s %5s  %s\n" "USER" "PID" "%CPU" "%MEM" "COMMAND"
+        for i in "${!lines[@]}"; do printf "  [%d] %s\n" "$i" "${lines[$i]}"; done
+    fi
     echo
 
     local targets=()

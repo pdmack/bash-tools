@@ -37,12 +37,13 @@ cdf() {
     done
 
     local matches=()
-    local find_args=("$abs_root" -type d -iname "*${query}*")
-    $hidden || find_args+=(-not -path "*/\.*")
+    # -prune stops descent into a matched dir, giving only the root of each hit
+    local find_cmd=("$abs_root" -type d -iname "*${query}*" -print -prune)
+    $hidden || find_cmd=("$abs_root" -not -path "*/\.*" -type d -iname "*${query}*" -print -prune)
 
     while IFS= read -r d; do
         matches+=("$d")
-    done < <(find "${find_args[@]}" 2>/dev/null | sort)
+    done < <(find "${find_cmd[@]}" 2>/dev/null | sort)
 
     if (( ${#matches[@]} == 0 )); then
         echo "cdf: no directory matching '$query' under $abs_root" >&2

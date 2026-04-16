@@ -15,14 +15,18 @@ cr() {
         else
             search_dirs=("$HOME/github/pdmack" "$HOME/fun-projects" "$HOME")
         fi
-        local matches=()
+        local matches=() seen_real=()
         for dir in "${search_dirs[@]}"; do
             [[ -d "$dir" ]] || continue
             while IFS= read -r d; do
-                local base
+                local base real
                 base=$(basename "$d")
+                real=$(realpath "$d" 2>/dev/null || echo "$d")
                 if [[ "${base,,}" == *"${query,,}"* ]]; then
-                    matches+=("$d")
+                    # skip duplicates (e.g. ./foo vs /abs/path/foo from CDPATH)
+                    local dup=false
+                    for s in "${seen_real[@]}"; do [[ "$s" == "$real" ]] && dup=true && break; done
+                    $dup || { matches+=("$real"); seen_real+=("$real"); }
                 fi
             done < <(find "$dir" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort)
         done

@@ -21,12 +21,17 @@ grepos() {
         fi
     fi
 
-    # Collect unique git repos from CDPATH
+    # Collect unique git repos from CDPATH, resolving relative entries against $HOME
     local seen=()
     local repos=()
-    IFS=: read -ra cdpath_dirs <<< "${CDPATH:-$HOME}"
+    local raw_dirs=()
+    IFS=: read -ra raw_dirs <<< "${CDPATH:-$HOME}"
+    local cdpath_dirs=()
+    for d in "${raw_dirs[@]}"; do
+        [[ "$d" = /* ]] && cdpath_dirs+=("$d") || cdpath_dirs+=("$HOME/${d#./}")
+    done
     for dir in "${cdpath_dirs[@]}"; do
-        [[ -d "$dir" && "$dir" != "." ]] || continue
+        [[ -d "$dir" ]] || continue
         while IFS= read -r d; do
             [[ -d "$d/.git" ]] || continue
             # deduplicate

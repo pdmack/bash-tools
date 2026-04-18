@@ -15,7 +15,10 @@ ssha() {
     done
 
     local seconds=$(( hours * 3600 ))
-    eval $(ssh-agent -s)
+    # reuse existing agent if alive, otherwise start a new one
+    if ! ssh-add -l &>/dev/null && [[ -z "$SSH_AUTH_SOCK" ]]; then
+        eval $(ssh-agent -s)
+    fi
 
     case "$key" in
         gitlab)

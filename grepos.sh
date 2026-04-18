@@ -13,6 +13,14 @@ grepos() {
         esac
     done
 
+    # Warn if fetch/sync requested but no SSH key loaded
+    if $do_fetch || $do_sync; then
+        if ! ssh-add -l &>/dev/null; then
+            echo "grepos: no SSH key loaded — run: ssha 4" >&2
+            return 1
+        fi
+    fi
+
     # Collect unique git repos from CDPATH
     local seen=()
     local repos=()

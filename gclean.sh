@@ -6,6 +6,33 @@ gclean() {
         return 1
     fi
 
+    local current main_branch
+    current=$(git branch --show-current)
+    if git rev-parse --verify main &>/dev/null; then
+        main_branch="main"
+    elif git rev-parse --verify master &>/dev/null; then
+        main_branch="master"
+    fi
+
+    # Check if current branch is merged into main/master
+    if [[ -n "$main_branch" && "$current" != "$main_branch" ]]; then
+        if git merge-base --is-ancestor HEAD "$main_branch" 2>/dev/null; then
+            local unstaged untracked
+            unstaged=$(git diff --name-only 2>/dev/null)
+            untracked=$(git ls-files --others --exclude-standard 2>/dev/null)
+            if [[ -n "$unstaged" || -n "$untracked" ]]; then
+                echo "gclean: current branch '$current' is merged into $main_branch but has uncommitted changes — skipping"
+            else
+                echo "Current branch '$current' is merged into $main_branch."
+                read -r -p "Switch to $main_branch and delete '$current'? [y/N] " confirm
+                if [[ "${confirm,,}" == "y" ]]; then
+                    git checkout "$main_branch" && git branch -d "$current"
+                fi
+            fi
+        fi
+    fi
+
+    # Delete other merged branches
     local branches
     branches=$(git branch --merged | grep -v '^\*' | grep -v '^\s*main$' | grep -v '^\s*master$')
 

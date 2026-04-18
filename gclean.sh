@@ -1,11 +1,46 @@
-# gclean - delete local branches already merged into the current branch
-# Usage: gclean
+# gclean - delete local branches already merged into main/master
+# Usage: gclean [-a|--all]
+#   -a|--all  run across all git repos in CDPATH (default: current repo only)
 gclean() {
-    if ! git rev-parse --git-dir &>/dev/null; then
-        echo "gclean: not a git repository" >&2
-        return 1
-    fi
+    local do_all=false
+    for arg in "$@"; do
+        case "$arg" in
+            -a|--all) do_all=true ;;
+            *) echo "Usage: gclean [-a|--all]" >&2; return 1 ;;
+        esac
+    done
 
+    if $do_all; then
+        local raw_dirs=() cdpath_dirs=()
+        IFS=: read -ra raw_dirs <<< "${CDPATH:-$HOME}"
+        for d in "${raw_dirs[@]}"; do
+            [[ "$d" = /* ]] && cdpath_dirs+=("$d") || cdpath_dirs+=("$HOME/${d#./}")
+        done
+        local repos=() seen=()
+        for dir in "${cdpath_dirs[@]}"; do
+            [[ -d "$dir" ]] || continue
+            while IFS= read -r d; do
+                [[ -d "$d/.git" ]] || continue
+                local already=false
+                for s in "${seen[@]:-}"; do [[ "$s" == "$d" ]] && already=true && break; done
+                $already || { repos+=("$d"); seen+=("$d"); }
+            done < <(find "$dir" -maxdepth 1 -mindepth 1 -type d 2>/dev/null)
+        done
+        for repo in "${repos[@]}"; do
+            echo "=== $repo ==="
+            (cd "$repo" && _gclean_repo)
+            echo
+        done
+    else
+        if ! git rev-parse --git-dir &>/dev/null; then
+            echo "gclean: not a git repository" >&2
+            return 1
+        fi
+        _gclean_repo
+    fi
+}
+
+_gclean_repo() {
     local current main_branch
     current=$(git branch --show-current)
     if git rev-parse --verify main &>/dev/null; then
@@ -45,7 +80,7 @@ gclean() {
     echo "$branches"
     echo
     read -r -p "Delete these branches? [y/N] " confirm
-    [[ "${confirm,,}" == "y" ]] || { echo "Aborted." >&2; return 1; }
+    [[ "${confirm,,}" == "y" ]] || { echo "Aborted."; return 1; }
 
     echo "$branches" | xargs git branch -d
 }

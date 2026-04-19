@@ -44,6 +44,7 @@ maas() {
             code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$url" 2>/dev/null)
             case "$code" in
                 200|302|303) echo "maas: $name reachable (HTTP $code)" ;;
+                405)         echo "maas: $name reachable (HTTP 405 — MCP endpoint expects POST)" ;;
                 401|403)     echo "maas: $name reachable but not authenticated (HTTP $code)" ;;
                 000)         echo "maas: $name unreachable (no response)" ;;
                 *)           echo "maas: $name HTTP $code" ;;

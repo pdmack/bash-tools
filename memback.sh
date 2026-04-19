@@ -122,6 +122,18 @@ memback() {
         (( copied++ ))
     done < <(find "$claude_dir" -maxdepth 1 -type f \( -name "*.md" -o -name "settings.json" \) 2>/dev/null)
 
+    # 1b. Global MCP config (~/.mcp.json)
+    if [[ -f "$HOME/.mcp.json" ]]; then
+        local dst="$dest_global/.mcp.json"
+        if $dry_run; then
+            echo "  $HOME/.mcp.json → $dst"
+        else
+            mkdir -p "$dest_global"
+            cp "$HOME/.mcp.json" "$dst"
+        fi
+        (( copied++ ))
+    fi
+
     # 2. Project memories (~/.claude/projects/*/memory/*.md)
     for memory_dir in "$claude_projects"/*/memory; do
         [[ -d "$memory_dir" ]] || continue

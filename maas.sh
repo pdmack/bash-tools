@@ -3,6 +3,10 @@
 #        maas check [server]    check if MCP server is reachable
 # Configure in site.sh: MAAS_MCP catalog
 # To authenticate: ask Claude Code to authenticate to the MCP server by name
+#
+# Note: assumes a centralized MCP-as-a-Service (MaaS) platform where multiple
+# MCP servers share a common base URL and auth provider. Not applicable to
+# individually-configured MCP servers.
 
 _maas_pick_server() {
     local keys=()

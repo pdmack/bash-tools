@@ -53,16 +53,15 @@
 #   cannot verify visibility automatically and emits a warning instead —
 #   it is your responsibility to ensure the repo is private.
 
-_memback_project_name() {
-    # Reconstruct the project directory name from the encoded portion of a
-    # Claude project key (after stripping the -home-<user>- prefix).
+_memback_project_walk() {
+    # Walk $HOME to resolve an encoded Claude project key segment.
+    # Outputs two lines: the resolved parent path, then the unresolved remainder
+    # (the project name / final path component).
     local encoded="$1"
     local current="$HOME"
     local remaining="$encoded"
 
     while [[ -n "$remaining" ]]; do
-        # Try prefixes from longest to shortest; only consume a segment if
-        # something remains after it (so we don't eat the project name itself).
         local candidate="$remaining"
         local found=""
         while [[ -n "$candidate" ]]; do
@@ -80,7 +79,23 @@ _memback_project_name() {
         remaining="${remaining#"${found}-"}"
     done
 
+    echo "$current"
     echo "$remaining"
+}
+
+_memback_project_name() {
+    local encoded="$1"
+    local info
+    mapfile -t info < <(_memback_project_walk "$encoded")
+    echo "${info[1]}"
+}
+
+_memback_project_path() {
+    # Returns the full reconstructed project path (parent + name).
+    local encoded="$1"
+    local info
+    mapfile -t info < <(_memback_project_walk "$encoded")
+    echo "${info[0]}/${info[1]}"
 }
 
 memback() {
@@ -161,6 +176,8 @@ memback() {
         encoded=$(echo "$project_key" | sed 's/^-home-[^-]*-//')
         local project_name
         project_name=$(_memback_project_name "$encoded")
+        local project_path
+        project_path=$(_memback_project_path "$encoded")
 
         local target="$dest_memories/$project_name"
 
@@ -175,6 +192,23 @@ memback() {
             fi
             (( copied++ ))
         done < <(find "$memory_dir" -type f -name "*.md" 2>/dev/null)
+
+        # Save git metadata for cross-machine restore
+        if [[ -d "$project_path/.git" ]]; then
+            local remote_url
+            remote_url=$(git -C "$project_path" remote get-url origin 2>/dev/null)
+            if [[ -n "$remote_url" ]]; then
+                local meta_dst="$target/.meta.json"
+                if $dry_run; then
+                    echo "  .meta.json → $meta_dst"
+                else
+                    mkdir -p "$target"
+                    jq -n --arg url "$remote_url" --arg path "$project_path" \
+                        '{"remote_url": $url, "local_path": $path}' > "$meta_dst"
+                fi
+                (( copied++ ))
+            fi
+        fi
     done
 
     if $dry_run; then
@@ -299,9 +333,12 @@ memrestore() {
             [[ "$ans" =~ ^[Yy]$ ]] || { echo "  skipped"; return 0; }
         fi
         mkdir -p "$(dirname "$dst")"
-        cp "$src" "$dst"
-        echo "  installed $dst"
-        (( installed++ ))
+        if cp "$src" "$dst" 2>/dev/null; then
+            echo "  installed $dst"
+            (( installed++ ))
+        else
+            echo "  ERROR: failed to write $dst" >&2
+        fi
     }
 
     echo "memrestore: platform=$platform src=$src_global"
@@ -357,6 +394,110 @@ memrestore() {
             fi
             rm -f "$tmp"
         fi
+    fi
+
+    # Memories — prompt per project
+    local src_memories="$skills_dir/claude-memories"
+    if [[ -d "$src_memories" ]]; then
+        echo ""
+        echo "memrestore: project memories"
+
+        for memory_src in "$src_memories"/*/; do
+            [[ -d "$memory_src" ]] || continue
+            local project_name
+            project_name=$(basename "$memory_src")
+
+            # Find matching project key in ~/.claude/projects/ — key must end with -<project_name>
+            local matched_key=""
+            for proj_dir in "$claude_dir/projects"/*/; do
+                [[ -d "$proj_dir" ]] || continue
+                local key
+                key=$(basename "$proj_dir")
+                if [[ "$key" == *"-${project_name}" ]]; then
+                    matched_key="$key"
+                    break
+                fi
+            done
+
+            local file_count
+            file_count=$(find "$memory_src" -name "*.md" -type f 2>/dev/null | wc -l | tr -d ' ')
+
+            if [[ -n "$matched_key" ]]; then
+                printf "  %-35s [found]      restore %s file(s)? [Y/n] " "$project_name" "$file_count"
+            else
+                printf "  %-35s [not found]  restore %s file(s)? [y/N] " "$project_name" "$file_count"
+            fi
+
+            if $dry_run; then
+                echo "(dry run)"
+                continue
+            fi
+
+            local ans
+            read -r ans
+            if [[ -n "$matched_key" ]]; then
+                ans="${ans:-y}"
+            else
+                ans="${ans:-n}"
+            fi
+            [[ "$ans" =~ ^[Yy]$ ]] || continue
+
+            # Determine target memory dir
+            local target_dir=""
+            if [[ -n "$matched_key" ]]; then
+                target_dir="$claude_dir/projects/$matched_key/memory"
+            else
+                # Try metadata for git clone offer
+                local meta_file="$memory_src/.meta.json"
+                local remote_url="" orig_path=""
+                if [[ -f "$meta_file" ]]; then
+                    remote_url=$(jq -r '.remote_url // ""' "$meta_file")
+                    orig_path=$(jq -r '.local_path // ""' "$meta_file" \
+                        | sed "s|^/home/[^/]*/|$HOME/|; s|^/Users/[^/]*/|$HOME/|")
+                fi
+
+                local proj_path=""
+                if [[ -n "$remote_url" && -n "$orig_path" ]]; then
+                    printf "    clone %s\n    → %s? [Y/n] " "$remote_url" "$orig_path"
+                    local clone_ans
+                    read -r clone_ans
+                    clone_ans="${clone_ans:-y}"
+                    if [[ "$clone_ans" =~ ^[Yy]$ ]]; then
+                        mkdir -p "$(dirname "$orig_path")"
+                        if git clone "$remote_url" "$orig_path"; then
+                            proj_path="$orig_path"
+                        else
+                            echo "    clone failed — skipped" >&2
+                            continue
+                        fi
+                    fi
+                fi
+
+                if [[ -z "$proj_path" ]]; then
+                    printf "    path on this machine (e.g. %s/github/pdmack/%s): " "$HOME" "$project_name"
+                    read -r proj_path
+                fi
+                if [[ -z "$proj_path" ]]; then
+                    echo "    skipped"
+                    continue
+                fi
+                local encoded_key
+                encoded_key=$(echo "$proj_path" | sed 's|/|-|g')
+                target_dir="$claude_dir/projects/$encoded_key/memory"
+            fi
+
+            local mem_copied=0
+            while IFS= read -r f; do
+                local rel="${f#${memory_src}}"
+                local dst="$target_dir/$rel"
+                mkdir -p "$(dirname "$dst")"
+                cp "$f" "$dst"
+                (( mem_copied++ ))
+            done < <(find "$memory_src" -name "*.md" -type f 2>/dev/null)
+
+            echo "    restored $mem_copied file(s) → $target_dir"
+            (( installed += mem_copied ))
+        done
     fi
 
     # Skills directory hint

@@ -68,6 +68,7 @@ export CDPATH=".:$HOME/github/pdmack:$HOME/work:$HOME"
 | `cdpath <show\|scan\|add\|rm>` | manage CDPATH entries in `site.sh` |
 | `mkcd <dir>` | mkdir + cd in one step |
 | `up [n]` | go up n directory levels |
+| `typo` | auto-corrects mistyped commands via `command_not_found_handle`; distance 1 runs immediately, distance 2 prompts |
 
 ### Data / dev
 | Tool | Description |

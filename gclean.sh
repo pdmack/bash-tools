@@ -11,21 +11,8 @@ gclean() {
     done
 
     if $do_all; then
-        local raw_dirs=() cdpath_dirs=()
-        IFS=: read -ra raw_dirs <<< "${CDPATH:-$HOME}"
-        for d in "${raw_dirs[@]}"; do
-            [[ "$d" = /* ]] && cdpath_dirs+=("$d") || cdpath_dirs+=("$HOME/${d#./}")
-        done
-        local repos=() seen=()
-        for dir in "${cdpath_dirs[@]}"; do
-            [[ -d "$dir" ]] || continue
-            while IFS= read -r d; do
-                [[ -d "$d/.git" ]] || continue
-                local already=false
-                for s in "${seen[@]:-}"; do [[ "$s" == "$d" ]] && already=true && break; done
-                $already || { repos+=("$d"); seen+=("$d"); }
-            done < <(find "$dir" -maxdepth 1 -mindepth 1 -type d 2>/dev/null)
-        done
+        local repos=()
+        mapfile -t repos < <(_bash_tools_cdpath_repos)
         for repo in "${repos[@]}"; do
             echo "=== $repo ==="
             (cd "$repo" && _gclean_repo)

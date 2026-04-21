@@ -30,7 +30,7 @@ export CDPATH=".:$HOME/github/pdmack:$HOME/work:$HOME"
 ### Git
 | Tool | Description |
 |------|-------------|
-| `grepos [--fetch] [--sync]` | scan all git repos in CDPATH, show branch/ahead/behind |
+| `grepos [--fetch] [--sync] [--ff]` | scan all git repos in CDPATH, show `owner/repo`, ssh/https, branch/ahead/behind; `--ff` offers to fast-forward clean repos |
 | `gclean` | delete local branches already merged to main |
 | `gdiff [branch]` | diff current branch against another (default: main) |
 

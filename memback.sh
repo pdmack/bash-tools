@@ -1,16 +1,33 @@
-# memback - back up Claude project memories and global config to $MEMBACK_DEST
+# memback  - back up Claude project memories and global config to $MEMBACK_DEST
+# memrestore - restore Claude config from $MEMBACK_DEST to this machine
+#
 # Usage: memback [-n|--dry-run]
+#        memrestore [-n|--dry-run] [-f|--force] [--platform linux|macos]
 #
 # Setup (site.sh):
 #   export MEMBACK_DEST="$HOME/your-backup-repo"   # root of your backup git repo
 #
-# What it does:
+# New machine workflow:
+#   1. Clone skills repo: git clone <url> $MEMBACK_DEST
+#   2. Set MEMBACK_DEST in site.sh and source it
+#   3. memrestore
+#   4. ln -s $MEMBACK_DEST ~/.claude/skills
+#
+# What memback does:
 #   1. Copies ~/.claude/CLAUDE.md and ~/.claude/settings.json into
 #      $MEMBACK_DEST/claude-global/
-#   2. Copies all *.md files from ~/.claude/projects/*/memory/ into
+#   2. Copies ~/.mcp.json into $MEMBACK_DEST/claude-global/
+#   3. Copies all *.md files from ~/.claude/projects/*/memory/ into
 #      $MEMBACK_DEST/claude-memories/<project-name>/
 #   Then commits and pushes. Safe to run repeatedly — only commits when
 #   something changed.
+#
+# What memrestore does:
+#   1. Installs claude-global/{CLAUDE.md,settings.json} → ~/.claude/
+#   2. Installs claude-global/.mcp.json → ~/
+#   3. For settings.json: rewrites backed-up home path to $HOME; on macOS
+#      also strips Linux-only /proc entries from sandbox.filesystem.denyRead
+#   Prompts before overwriting existing files (--force to skip).
 #
 # Project naming:
 #   Claude stores projects under ~/.claude/projects/ using a key that encodes
@@ -182,5 +199,178 @@ memback() {
         git -C "$skills_dir" push
     else
         echo "memback: nothing changed"
+    fi
+}
+
+# memrestore - restore Claude global config from $MEMBACK_DEST to this machine
+#
+# Usage: memrestore [-n|--dry-run] [--platform linux|macos]
+#
+# What it does:
+#   1. Installs claude-global/{CLAUDE.md,settings.json} into ~/.claude/
+#   2. Installs claude-global/.mcp.json into ~/
+#   3. For settings.json: rewrites the backed-up home path to $HOME, and on
+#      macOS strips Linux-only /proc entries from sandbox.filesystem.denyRead
+#   4. Reminds you to set up ~/.claude/skills → $MEMBACK_DEST if not present
+#
+# It does NOT overwrite files without prompting — use --force to skip prompts.
+#
+# Typical new-machine workflow:
+#   1. Clone your skills repo to $MEMBACK_DEST (e.g. ~/github/pdmack/skills)
+#   2. Set MEMBACK_DEST in site.sh and source it
+#   3. Run: memrestore
+#   4. Symlink skills: ln -s $MEMBACK_DEST ~/.claude/skills
+
+_memrestore_transform_settings() {
+    local src="$1" platform="$2"
+
+    # Detect the source home path from denyRead entries
+    local old_home
+    old_home=$(jq -r '
+        (.sandbox.filesystem.denyRead // [])[]
+        | select(test("^/(home|Users)/"))
+        | capture("^(?P<h>/(home|Users)/[^/]+)").h
+    ' "$src" 2>/dev/null | sort -u | head -1)
+
+    if [[ "$platform" == "macos" ]]; then
+        jq \
+            --arg old "${old_home:-__NO_MATCH__}" \
+            --arg new "$HOME" \
+            'walk(if type == "string" then gsub($old; $new) else . end)
+             | if .sandbox.filesystem.denyRead then
+                 .sandbox.filesystem.denyRead |= map(select(startswith("/proc") | not))
+               else . end' \
+            "$src"
+    else
+        jq \
+            --arg old "${old_home:-__NO_MATCH__}" \
+            --arg new "$HOME" \
+            'walk(if type == "string" then gsub($old; $new) else . end)' \
+            "$src"
+    fi
+}
+
+memrestore() {
+    local dry_run=false force=false platform=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --dry-run|-n) dry_run=true; shift ;;
+            --force|-f)   force=true;   shift ;;
+            --platform)   platform="$2"; shift 2 ;;
+            *) echo "memrestore: unknown option: $1" >&2; return 1 ;;
+        esac
+    done
+
+    if [[ -z "$platform" ]]; then
+        case "$(uname -s)" in
+            Darwin) platform="macos" ;;
+            Linux)  platform="linux" ;;
+            *) echo "memrestore: unsupported platform: $(uname -s)" >&2; return 1 ;;
+        esac
+    fi
+
+    local skills_dir="${MEMBACK_DEST:-}"
+    if [[ -z "$skills_dir" ]]; then
+        echo "memrestore: set MEMBACK_DEST in site.sh to your backup repo path" >&2
+        return 1
+    fi
+    if [[ ! -d "$skills_dir" ]]; then
+        echo "memrestore: MEMBACK_DEST not found: $skills_dir" >&2
+        echo "  clone your skills repo there first" >&2
+        return 1
+    fi
+
+    local src_global="$skills_dir/claude-global"
+    if [[ ! -d "$src_global" ]]; then
+        echo "memrestore: $src_global not found — run memback on source machine first" >&2
+        return 1
+    fi
+
+    local claude_dir="$HOME/.claude"
+    local installed=0
+
+    # Install a single file, prompting if destination exists (unless --force)
+    _memrestore_cp() {
+        local src="$1" dst="$2"
+        if [[ -e "$dst" ]] && ! $force; then
+            printf "memrestore: %s exists — overwrite? [y/N] " "$dst"
+            read -r ans
+            [[ "$ans" =~ ^[Yy]$ ]] || { echo "  skipped"; return 0; }
+        fi
+        mkdir -p "$(dirname "$dst")"
+        cp "$src" "$dst"
+        echo "  installed $dst"
+        (( installed++ ))
+    }
+
+    echo "memrestore: platform=$platform src=$src_global"
+
+    # CLAUDE.md
+    if [[ -f "$src_global/CLAUDE.md" ]]; then
+        if $dry_run; then
+            echo "  $src_global/CLAUDE.md → $claude_dir/CLAUDE.md"
+        else
+            _memrestore_cp "$src_global/CLAUDE.md" "$claude_dir/CLAUDE.md"
+        fi
+    fi
+
+    # .mcp.json (all HTTP URLs — no transform needed)
+    if [[ -f "$src_global/.mcp.json" ]]; then
+        if $dry_run; then
+            echo "  $src_global/.mcp.json → $HOME/.mcp.json"
+        else
+            _memrestore_cp "$src_global/.mcp.json" "$HOME/.mcp.json"
+        fi
+    fi
+
+    # settings.json — platform-aware transform
+    if [[ -f "$src_global/settings.json" ]]; then
+        if $dry_run; then
+            echo "  $src_global/settings.json → $claude_dir/settings.json"
+            echo "    transforms: home path → \$HOME"
+            [[ "$platform" == "macos" ]] && echo "    transforms: strip /proc denyRead entries"
+        else
+            local tmp
+            tmp=$(mktemp)
+            if _memrestore_transform_settings "$src_global/settings.json" "$platform" > "$tmp" 2>&1; then
+                if $force || [[ ! -e "$claude_dir/settings.json" ]]; then
+                    mkdir -p "$claude_dir"
+                    cp "$tmp" "$claude_dir/settings.json"
+                    echo "  installed $claude_dir/settings.json"
+                    (( installed++ ))
+                else
+                    printf "memrestore: %s exists — overwrite? [y/N] " "$claude_dir/settings.json"
+                    read -r ans
+                    if [[ "$ans" =~ ^[Yy]$ ]]; then
+                        mkdir -p "$claude_dir"
+                        cp "$tmp" "$claude_dir/settings.json"
+                        echo "  installed $claude_dir/settings.json"
+                        (( installed++ ))
+                    else
+                        echo "  skipped $claude_dir/settings.json"
+                    fi
+                fi
+            else
+                echo "memrestore: failed to transform settings.json:" >&2
+                cat "$tmp" >&2
+            fi
+            rm -f "$tmp"
+        fi
+    fi
+
+    # Skills directory hint
+    local skills_link="$claude_dir/skills"
+    if [[ ! -e "$skills_link" ]]; then
+        echo ""
+        echo "memrestore: note: $skills_link not set up"
+        echo "  to use your skills repo as the skills dir:"
+        echo "    ln -s $skills_dir $skills_link"
+    fi
+
+    if $dry_run; then
+        echo "dry run complete (platform: $platform)"
+    else
+        echo "memrestore: done — $installed file(s) installed"
     fi
 }

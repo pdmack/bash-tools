@@ -1,22 +1,26 @@
 # grepos - scan git repos from CDPATH and show main branch status
-# Usage: grepos [-f|--fetch] [-s|--sync] [-u|--ff]
-#   -f|--fetch  run git fetch --all on each repo before checking status
-#   -s|--sync   offer to sync fork mains (repos with an 'upstream' remote)
-#   -u|--ff     offer to fast-forward repos that are behind origin with no local commits
+# Usage: grepos [-f|--fetch] [-u|--update]
+#   -f|--fetch   run git fetch --all on each repo before checking status
+#   -u|--update  offer to update repos that are behind; behavior is per-repo:
+#                  upstream remote present + behind upstream →
+#                    full fork sync: merge upstream/main locally, push to origin
+#                  no upstream remote (or upstream current) + behind origin, clean →
+#                    git pull --ff-only from origin
+#                Repos with local commits (ahead > 0) or a dirty tree are skipped
+#                regardless — those need manual attention.
 grepos() {
-    local do_fetch=false do_sync=false do_ff=false
+    local do_fetch=false do_update=false
 
     for arg in "$@"; do
         case "$arg" in
-            -f|--fetch) do_fetch=true ;;
-            -s|--sync)  do_sync=true ;;
-            -u|--ff)    do_ff=true ;;
-            *) echo "Usage: grepos [-f|--fetch] [-s|--sync] [-u|--ff]" >&2; return 1 ;;
+            -f|--fetch)  do_fetch=true ;;
+            -u|--update) do_update=true ;;
+            *) echo "Usage: grepos [-f|--fetch] [-u|--update]" >&2; return 1 ;;
         esac
     done
 
     # Warn if network ops requested but no SSH key loaded
-    if $do_fetch || $do_sync || $do_ff; then
+    if $do_fetch || $do_update; then
         if ! ssh-add -l &>/dev/null; then
             echo "grepos: no SSH key loaded — run: ssha 4" >&2
             return 1
@@ -82,69 +86,76 @@ grepos() {
             (( behind > 0 )) && status_str+="↓${behind} behind"
         fi
 
-        # FF candidate: behind origin, no local commits, not dirty, not detached
-        if $do_ff && [[ "$branch" != "detached" && -z "$dirty" ]] \
-                && [[ -n "$behind" && "$behind" != "0" ]] \
-                && [[ "$ahead" == "0" ]]; then
-            to_ff+=("$repo")
-        fi
-
         # Upstream (fork) check
-        local upstream_str=""
+        local upstream_str="" has_upstream=false u_behind=0
         if git -C "$repo" remote | grep -q "^upstream$"; then
-            local u_ahead u_behind
+            has_upstream=true
+            local u_ahead
             u_ahead=$(git -C "$repo" rev-list --count "upstream/${main_branch}..HEAD" 2>/dev/null)
             u_behind=$(git -C "$repo" rev-list --count "HEAD..upstream/${main_branch}" 2>/dev/null)
-            if [[ -n "$u_behind" && "$u_behind" != "0" ]]; then
+            u_behind=${u_behind:-0}
+            if [[ "$u_behind" != "0" ]]; then
                 upstream_str="  [upstream ↓${u_behind}]"
-                $do_sync && to_sync+=("$repo")
+                $do_update && to_sync+=("$repo")
             elif [[ -n "$u_ahead" || -n "$u_behind" ]]; then
                 upstream_str="  [upstream ✓]"
             fi
+        fi
+
+        # FF candidate: behind origin, no local commits, not dirty, not detached,
+        # and not already queued for a fork sync
+        if $do_update && [[ "$branch" != "detached" && -z "$dirty" ]] \
+                && [[ -n "$behind" && "$behind" != "0" ]] \
+                && [[ "$ahead" == "0" ]] \
+                && ! ( $has_upstream && [[ "$u_behind" != "0" ]] ); then
+            to_ff+=("$repo")
         fi
 
         printf "  %-35s %-5s [%s]%s  %s%s\n" \
             "$label" "$proto" "$branch" "$dirty" "$status_str" "$upstream_str"
     done
 
-    # Offer sync
-    if $do_sync && (( ${#to_sync[@]} > 0 )); then
+    # Offer fork sync (upstream remote present, behind upstream)
+    if $do_update && (( ${#to_sync[@]} > 0 )); then
         echo
-        echo "Repos with upstream main ahead:"
+        echo "Fork repos behind upstream — will merge upstream/main and push to origin:"
         for repo in "${to_sync[@]}"; do
-            local _url _owner _name _lbl
+            local _url _owner _name _lbl _ub
             _name=$(basename "$repo")
             _url=$(git -C "$repo" remote get-url origin 2>/dev/null)
             _owner=$(sed -n 's|.*[:/]\([^/]*\)/[^/]*\.git$|\1|p' <<< "$_url")
             [[ -z "$_owner" ]] && _owner=$(sed -n 's|.*[:/]\([^/]*\)/[^/]*$|\1|p' <<< "$_url")
             [[ -n "$_owner" ]] && _lbl="$_owner/$_name" || _lbl="$_name"
-            echo "  $_lbl"
+            _ub=$(git -C "$repo" rev-list --count "HEAD..upstream/$(git -C "$repo" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|.*/||')" 2>/dev/null)
+            echo "  $_lbl  (upstream ↓${_ub})"
         done
         echo
         read -r -p "Sync these forks? [y/N] " confirm
-        [[ "${confirm,,}" != "y" ]] && return 0
+        [[ "${confirm,,}" != "y" ]] && { (( ${#to_ff[@]} == 0 )) && return 0 || true; }
 
-        for repo in "${to_sync[@]}"; do
-            local main_branch s_url s_owner s_name
-            main_branch=$(git -C "$repo" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null \
-                | sed 's|.*/||')
-            [[ -z "$main_branch" ]] && main_branch="main"
-            s_name=$(basename "$repo")
-            s_url=$(git -C "$repo" remote get-url origin 2>/dev/null)
-            s_owner=$(sed -n 's|.*[:/]\([^/]*\)/[^/]*\.git$|\1|p' <<< "$s_url")
-            [[ -z "$s_owner" ]] && s_owner=$(sed -n 's|.*[:/]\([^/]*\)/[^/]*$|\1|p' <<< "$s_url")
-            echo "→ syncing ${s_owner:+$s_owner/}$s_name..."
-            git -C "$repo" checkout "$main_branch" -q \
-                && git -C "$repo" merge "upstream/${main_branch}" --ff-only \
-                && git -C "$repo" push origin "$main_branch" \
-                || echo "  failed — may need manual merge"
-        done
+        if [[ "${confirm,,}" == "y" ]]; then
+            for repo in "${to_sync[@]}"; do
+                local main_branch s_url s_owner s_name
+                main_branch=$(git -C "$repo" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null \
+                    | sed 's|.*/||')
+                [[ -z "$main_branch" ]] && main_branch="main"
+                s_name=$(basename "$repo")
+                s_url=$(git -C "$repo" remote get-url origin 2>/dev/null)
+                s_owner=$(sed -n 's|.*[:/]\([^/]*\)/[^/]*\.git$|\1|p' <<< "$s_url")
+                [[ -z "$s_owner" ]] && s_owner=$(sed -n 's|.*[:/]\([^/]*\)/[^/]*$|\1|p' <<< "$s_url")
+                echo "→ syncing ${s_owner:+$s_owner/}$s_name..."
+                git -C "$repo" checkout "$main_branch" -q \
+                    && git -C "$repo" merge "upstream/${main_branch}" --ff-only \
+                    && git -C "$repo" push origin "$main_branch" \
+                    || echo "  failed — may need manual merge"
+            done
+        fi
     fi
 
-    # Offer fast-forward
-    if $do_ff && (( ${#to_ff[@]} > 0 )); then
+    # Offer fast-forward (no upstream remote, clean, behind origin)
+    if $do_update && (( ${#to_ff[@]} > 0 )); then
         echo
-        echo "Repos that can be fast-forwarded:"
+        echo "Repos that can be fast-forwarded from origin:"
         for repo in "${to_ff[@]}"; do
             local f_url f_owner f_name f_behind
             f_name=$(basename "$repo")

@@ -1,5 +1,20 @@
 # bash-tools loader - source this from ~/.bashrc
+#
+# Conflict detection
+#   At load time, bash-tools warns if any of its functions would shadow a
+#   $PATH command or be shadowed by an existing alias. To suppress warnings
+#   for known-intentional overrides, set in site.sh before sourcing load.sh:
+#
+#     BASH_TOOLS_IGNORE_CONFLICTS="git json"   # space-separated names
+#
+#   "git" is pre-ignored — grebase.sh intentionally wraps it to intercept
+#   merge commands. Add other names only if you've reviewed the override.
+#   To silence all conflict warnings: BASH_TOOLS_IGNORE_CONFLICTS="*"
+
+BASH_TOOLS_IGNORE_CONFLICTS="${BASH_TOOLS_IGNORE_CONFLICTS-git}"
+
 _bash_tools_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_bash_tools_pre_fns=$(declare -F | awk '{print $3}')
 
 source "$_bash_tools_dir/cr.sh"
 source "$_bash_tools_dir/ssha.sh"
@@ -43,4 +58,23 @@ source "$_bash_tools_dir/tools.sh"
 # machine-specific overrides (gitignored)
 [[ -f "$_bash_tools_dir/site.sh" ]] && source "$_bash_tools_dir/site.sh"
 
-unset _bash_tools_dir
+# Warn about naming conflicts with $PATH commands or existing aliases
+_bash_tools_check_conflicts() {
+    [[ "$BASH_TOOLS_IGNORE_CONFLICTS" == "*" ]] && return
+    local fn
+    while IFS= read -r fn; do
+        [[ "$fn" == _* ]] && continue
+        grep -qxF "$fn" <<< "$_bash_tools_pre_fns" && continue
+        # shellcheck disable=SC2076
+        [[ " $BASH_TOOLS_IGNORE_CONFLICTS " == *" $fn "* ]] && continue
+        if type -P "$fn" &>/dev/null; then
+            echo "bash-tools: warning: $fn() shadows $(type -P "$fn")" >&2
+        fi
+        if alias "$fn" &>/dev/null 2>&1; then
+            echo "bash-tools: warning: $fn() is shadowed by alias: $(alias "$fn" 2>/dev/null)" >&2
+        fi
+    done < <(declare -F | awk '{print $3}')
+}
+_bash_tools_check_conflicts
+unset -f _bash_tools_check_conflicts
+unset _bash_tools_pre_fns _bash_tools_dir

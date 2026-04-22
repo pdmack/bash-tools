@@ -30,7 +30,7 @@ export CDPATH=".:$HOME/github/pdmack:$HOME/work:$HOME"
 ### Git
 | Tool | Description |
 |------|-------------|
-| `grepos [--fetch] [--update]` | scan all git repos in CDPATH, show `owner/repo`, ssh/https, branch/ahead/behind; `--update` offers to update behind repos: fork sync (upstream→local→origin) for repos with an `upstream` remote, `pull --ff-only` for the rest |
+| `grepos [--fetch] [--update]` | scan all git repos in CDPATH, show `owner/repo`, ssh/https, branch/ahead/behind, non-origin remote status; `--update` offers fork sync or `pull --ff-only` per repo; set `BASH_TOOLS_UPSTREAM_REMOTE` in `site.sh` to prefer a remote name (e.g. `nvidia`) |
 | `gclean` | delete local branches already merged to main |
 | `gdiff [branch]` | diff current branch against another (default: main) |
 

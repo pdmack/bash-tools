@@ -9,3 +9,7 @@ export CDPATH=".:$HOME/github/pdmack:$HOME/fun-projects:$HOME"
 
 # Path to your backup git repo root, used by: memback
 # export MEMBACK_DEST="$HOME/your-backup-repo"
+
+# Preferred non-origin remote name for grepos fork tracking (e.g. nvidia, upstream)
+# When a repo has multiple non-origin remotes, this one is shown and used for --update.
+# export BASH_TOOLS_UPSTREAM_REMOTE="nvidia"

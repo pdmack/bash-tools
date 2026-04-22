@@ -123,8 +123,10 @@ grepos() {
             to_ff+=("$repo")
         fi
 
+        local display_label="$label"
+        (( ${#label} > 35 )) && display_label="${label:0:34}…"
         printf "  %-35s %-5s [%s]%s  %s%s\n" \
-            "$label" "$proto" "$branch" "$dirty" "$status_str" "$upstream_str"
+            "$display_label" "$proto" "$branch" "$dirty" "$status_str" "$upstream_str"
     done
 
     # Offer fork sync (non-origin remote present, behind it)

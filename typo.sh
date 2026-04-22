@@ -6,12 +6,25 @@
 #   distance 2 → prompts before running
 #   distance > 2, or no match → gives up with normal "command not found"
 #
+# BASH_TOOLS_TYPO_IGNORE: space-separated words to never correct. Defaults to
+# "all a" — keywords accepted by bash-tools prompts (psk, cdpath) that can race
+# into bash's input buffer when typed before a read() is ready. Add more in
+# site.sh. Set to "*" to disable typo correction entirely.
+#
 # Disable: unset -f command_not_found_handle
+
+BASH_TOOLS_TYPO_IGNORE="${BASH_TOOLS_TYPO_IGNORE-all a}"
 
 command_not_found_handle() {
     local cmd="$1"
     shift
     local args=("$@")
+
+    if [[ "$BASH_TOOLS_TYPO_IGNORE" == "*" ]] || \
+       [[ " $BASH_TOOLS_TYPO_IGNORE " == *" $cmd "* ]]; then
+        echo "bash: $cmd: command not found" >&2
+        return 127
+    fi
 
     local result
     result=$(python3 - "$cmd" <<'EOF'

@@ -47,13 +47,15 @@ gpu() {
                 NR==FNR { next }
                 { pid=$1; mem=$2; name=$3
                   gsub(/ /,"",pid); gsub(/ /,"",mem); gsub(/^ /,"",name)
+                  if (length(name) > 30) name = substr(name, 1, 29) ">"
                   printf "        PID %-8s  %-30s  %s MiB\n", pid, name, mem
                 }' /dev/null -)
         # Filter to this GPU's processes via pmon
         local pmon
         pmon=$(nvidia-smi pmon -s m -c 1 2>/dev/null \
             | awk -v gpu="$idx" 'NR>2 && $1==gpu && $3!~/-/ {
-                printf "        PID %-8s  %-30s  %s MiB\n", $2, $NF, $4
+                name=$NF; if (length(name) > 30) name = substr(name, 1, 29) ">"
+                printf "        PID %-8s  %-30s  %s MiB\n", $2, name, $4
               }')
 
         if [[ -n "$pmon" ]]; then

@@ -188,10 +188,12 @@ memrestore() {
             local file_count
             file_count=$(find "$memory_src" -name "*.md" -type f 2>/dev/null | wc -l | tr -d ' ')
 
+            local display_name="$project_name"
+            (( ${#project_name} > 35 )) && display_name="${project_name:0:34}…"
             if [[ -n "$matched_key" ]]; then
-                printf "  %-35s [found]      restore %s file(s)? [Y/n] " "$project_name" "$file_count"
+                printf "  %-35s [found]      restore %s file(s)? [Y/n] " "$display_name" "$file_count"
             else
-                printf "  %-35s [not found]  restore %s file(s)? [y/N] " "$project_name" "$file_count"
+                printf "  %-35s [not found]  restore %s file(s)? [y/N] " "$display_name" "$file_count"
             fi
 
             if $dry_run; then

@@ -185,6 +185,12 @@ memback() {
         if [[ -d "$project_path/.git" ]]; then
             local remote_url
             remote_url=$(git -C "$project_path" remote get-url origin 2>/dev/null)
+            # Prefer SSH for GitHub/GitLab so memrestore can clone without credential prompts
+            if [[ "$remote_url" =~ ^https://github\.com/(.+)$ ]]; then
+                remote_url="git@github.com:${BASH_REMATCH[1]}"
+            elif [[ "$remote_url" =~ ^https://gitlab\.com/(.+)$ ]]; then
+                remote_url="git@gitlab.com:${BASH_REMATCH[1]}"
+            fi
             if [[ -n "$remote_url" ]]; then
                 local meta_dst="$target/.meta.json"
                 if $dry_run; then

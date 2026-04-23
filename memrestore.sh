@@ -224,15 +224,23 @@ memrestore() {
                         | sed "s|^/home/[^/]*/|$HOME/|; s|^/Users/[^/]*/|$HOME/|")
                 fi
 
+                # Prefer SSH for GitHub/GitLab HTTPS URLs — avoids credential prompts
+                local clone_url="$remote_url"
+                if [[ "$clone_url" =~ ^https://github\.com/(.+)$ ]]; then
+                    clone_url="git@github.com:${BASH_REMATCH[1]}"
+                elif [[ "$clone_url" =~ ^https://gitlab\.com/(.+)$ ]]; then
+                    clone_url="git@gitlab.com:${BASH_REMATCH[1]}"
+                fi
+
                 local proj_path=""
-                if [[ -n "$remote_url" && -n "$orig_path" ]]; then
-                    printf "    clone %s\n    → %s? [Y/n] " "$remote_url" "$orig_path"
+                if [[ -n "$clone_url" && -n "$orig_path" ]]; then
+                    printf "    clone %s\n    → %s? [Y/n] " "$clone_url" "$orig_path"
                     local clone_ans
                     read -r clone_ans
                     clone_ans="${clone_ans:-y}"
                     if [[ "$clone_ans" =~ ^[Yy]$ ]]; then
                         mkdir -p "$(dirname "$orig_path")"
-                        if git clone "$remote_url" "$orig_path"; then
+                        if git clone "$clone_url" "$orig_path"; then
                             proj_path="$orig_path"
                         else
                             echo "    clone failed — skipped" >&2

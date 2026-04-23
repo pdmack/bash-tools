@@ -86,6 +86,16 @@ _memback_project_path() {
     echo "${info[0]}/${info[1]}"
 }
 
+_memback_cp() {
+    local src="$1" dst="$2"
+    if [[ -f "$dst" ]] && cmp -s "$src" "$dst"; then
+        return 1  # identical — skip
+    fi
+    mkdir -p "$(dirname "$dst")"
+    cp "$src" "$dst"
+    return 0  # written
+}
+
 memback() {
     local dry_run=false
     [[ "${1:-}" == "--dry-run" || "${1:-}" == "-n" ]] && dry_run=true
@@ -128,30 +138,28 @@ memback() {
         echo "memback: warning: cannot verify visibility for non-GitHub remote — ensure $remote_url is private" >&2
     fi
 
-    local copied=0
+    local copied=0 found=0
 
     # 1. Global claude config (~/.claude/*.md and settings.json)
     while IFS= read -r f; do
         local dst="$dest_global/$(basename "$f")"
+        (( found++ ))
         if $dry_run; then
             echo "  $f → $dst"
         else
-            mkdir -p "$dest_global"
-            cp "$f" "$dst"
+            _memback_cp "$f" "$dst" && (( copied++ ))
         fi
-        (( copied++ ))
     done < <(find "$claude_dir" -maxdepth 1 -type f \( -name "*.md" -o -name "settings.json" \) 2>/dev/null)
 
     # 1b. Global MCP config (~/.mcp.json)
     if [[ -f "$HOME/.mcp.json" ]]; then
         local dst="$dest_global/.mcp.json"
+        (( found++ ))
         if $dry_run; then
             echo "  $HOME/.mcp.json → $dst"
         else
-            mkdir -p "$dest_global"
-            cp "$HOME/.mcp.json" "$dst"
+            _memback_cp "$HOME/.mcp.json" "$dst" && (( copied++ ))
         fi
-        (( copied++ ))
     fi
 
     # 2. Project memories (~/.claude/projects/*/memory/*.md)
@@ -172,13 +180,12 @@ memback() {
         while IFS= read -r f; do
             local rel="${f#$memory_dir/}"
             local dst="$target/$rel"
+            (( found++ ))
             if $dry_run; then
                 echo "  $f → $dst"
             else
-                mkdir -p "$(dirname "$dst")"
-                cp "$f" "$dst"
+                _memback_cp "$f" "$dst" && (( copied++ ))
             fi
-            (( copied++ ))
         done < <(find "$memory_dir" -type f -name "*.md" 2>/dev/null)
 
         # Save git metadata for cross-machine restore
@@ -193,29 +200,32 @@ memback() {
             fi
             if [[ -n "$remote_url" ]]; then
                 local meta_dst="$target/.meta.json"
+                (( found++ ))
                 if $dry_run; then
                     echo "  .meta.json → $meta_dst"
                 else
-                    mkdir -p "$target"
+                    local tmp
+                    tmp=$(mktemp)
                     jq -n --arg url "$remote_url" --arg path "$project_path" \
-                        '{"remote_url": $url, "local_path": $path}' > "$meta_dst"
+                        '{"remote_url": $url, "local_path": $path}' > "$tmp"
+                    _memback_cp "$tmp" "$meta_dst" && (( copied++ ))
+                    rm -f "$tmp"
                 fi
-                (( copied++ ))
             fi
         fi
     done
 
     if $dry_run; then
-        echo "dry run: $copied file(s) would be copied"
+        echo "dry run: $found file(s) would be checked"
         return 0
     fi
 
-    if (( copied == 0 )); then
+    if (( found == 0 )); then
         echo "memback: no files found"
         return 0
     fi
 
-    echo "copied $copied file(s)"
+    echo "memback: $copied/$found file(s) changed"
 
     # Commit and push
     local changed=false

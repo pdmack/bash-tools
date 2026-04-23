@@ -90,9 +90,13 @@ memrestore() {
     local claude_dir="$HOME/.claude"
     local installed=0
 
-    # Install a single file, prompting if destination exists (unless --force)
+    # Install a single file; skip if identical, prompt if changed and no --force
     _memrestore_cp() {
         local src="$1" dst="$2"
+        if [[ -e "$dst" ]] && cmp -s "$src" "$dst"; then
+            echo "  up to date: $dst"
+            return 0
+        fi
         if [[ -e "$dst" ]] && ! $force; then
             printf "memrestore: %s exists — overwrite? [y/N] " "$dst"
             read -r ans
@@ -137,21 +141,24 @@ memrestore() {
             local tmp
             tmp=$(mktemp)
             if _memrestore_transform_settings "$src_global/settings.json" "$platform" > "$tmp" 2>&1; then
-                if $force || [[ ! -e "$claude_dir/settings.json" ]]; then
+                local dst="$claude_dir/settings.json"
+                if [[ -e "$dst" ]] && cmp -s "$tmp" "$dst"; then
+                    echo "  up to date: $dst"
+                elif $force || [[ ! -e "$dst" ]]; then
                     mkdir -p "$claude_dir"
-                    cp "$tmp" "$claude_dir/settings.json"
-                    echo "  installed $claude_dir/settings.json"
+                    cp "$tmp" "$dst"
+                    echo "  installed $dst"
                     (( installed++ ))
                 else
-                    printf "memrestore: %s exists — overwrite? [y/N] " "$claude_dir/settings.json"
+                    printf "memrestore: %s exists — overwrite? [y/N] " "$dst"
                     read -r ans
                     if [[ "$ans" =~ ^[Yy]$ ]]; then
                         mkdir -p "$claude_dir"
-                        cp "$tmp" "$claude_dir/settings.json"
-                        echo "  installed $claude_dir/settings.json"
+                        cp "$tmp" "$dst"
+                        echo "  installed $dst"
                         (( installed++ ))
                     else
-                        echo "  skipped $claude_dir/settings.json"
+                        echo "  skipped $dst"
                     fi
                 fi
             else
@@ -262,10 +269,14 @@ memrestore() {
                 target_dir="$claude_dir/projects/$encoded_key/memory"
             fi
 
-            local mem_copied=0
+            local mem_found=0 mem_copied=0
             while IFS= read -r f; do
                 local rel="${f#${memory_src}}"
                 local dst="$target_dir/$rel"
+                (( mem_found++ ))
+                if [[ -f "$dst" ]] && cmp -s "$f" "$dst"; then
+                    continue
+                fi
                 mkdir -p "$(dirname "$dst")"
                 if cp "$f" "$dst" 2>/dev/null; then
                     (( mem_copied++ ))
@@ -274,7 +285,7 @@ memrestore() {
                 fi
             done < <(find "$memory_src" -name "*.md" -type f 2>/dev/null)
 
-            echo "    restored $mem_copied file(s) → $target_dir"
+            echo "    restored $mem_copied/$mem_found file(s) → $target_dir"
             (( installed += mem_copied ))
         done
     fi

@@ -37,9 +37,14 @@ cdf() {
     done
 
     local matches=()
-    # -prune stops descent into a matched dir, giving only the root of each hit
-    local find_cmd=("$abs_root" -type d -iname "*${query}*" -print -prune)
-    $hidden || find_cmd=("$abs_root" -not -path "*/\.*" -type d -iname "*${query}*" -print -prune)
+    # -prune stops descent into matched dirs; hidden exclusion uses ( -name ".*" -prune ) -o
+    # so hidden dirs are pruned rather than just filtered, which avoids traversing .git etc.
+    local find_cmd
+    if $hidden; then
+        find_cmd=("$abs_root" -type d -iname "*${query}*" -print -prune)
+    else
+        find_cmd=("$abs_root" '(' -name ".*" -prune ')' -o '(' -type d -iname "*${query}*" -print -prune ')')
+    fi
 
     while IFS= read -r d; do
         matches+=("$d")

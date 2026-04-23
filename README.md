@@ -65,6 +65,7 @@ export CDPATH=".:$HOME/github/pdmack:$HOME/work:$HOME"
 ### Navigation
 | Tool | Description |
 |------|-------------|
+| `cdf <query> [root]` | find and cd to a directory by name (fuzzy, interactive picker) |
 | `cdpath <show\|scan\|add\|rm>` | manage CDPATH entries in `site.sh` |
 | `mkcd <dir>` | mkdir + cd in one step |
 | `up [n]` | go up n directory levels |

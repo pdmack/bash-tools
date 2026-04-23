@@ -20,7 +20,7 @@ cdf() {
     fi
 
     local abs_root
-    abs_root=$(realpath "$root" 2>/dev/null || echo "$root")
+    abs_root=$(cd "$root" 2>/dev/null && pwd || echo "$root")
 
     # Warn against searching from / or first-tier dirs
     local -a danger=("/" "/usr" "/bin" "/sbin" "/lib" "/lib64" "/etc"

@@ -13,3 +13,9 @@ export CDPATH=".:$HOME/github/pdmack:$HOME/fun-projects:$HOME"
 # Preferred non-origin remote name for grepos fork tracking (e.g. nvidia, upstream)
 # When a repo has multiple non-origin remotes, this one is shown and used for --update.
 # export BASH_TOOLS_UPSTREAM_REMOTE="nvidia"
+
+# Extra directory names for cdf to skip (space-separated).
+# Add large non-project trees that would cause cdf to hang: venvs, SDK installs,
+# Go/Rust/npm caches, or massive manifest repos.
+# cdf already prunes: hidden dirs, node_modules, site-packages, Library/Applications (macOS)
+# export BASH_TOOLS_CDF_PRUNE="myproject-env go vendor cargo"

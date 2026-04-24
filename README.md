@@ -65,7 +65,7 @@ export CDPATH=".:$HOME/github/pdmack:$HOME/work:$HOME"
 ### Navigation
 | Tool | Description |
 |------|-------------|
-| `cdf <query> [root]` | find and cd to a directory by name (fuzzy, interactive picker) |
+| `cdf <query> [root]` | find and cd to a directory by name (fuzzy, interactive picker); set `BASH_TOOLS_CDF_PRUNE` in `site.sh` to skip large non-project trees (e.g. venvs, SDK installs, Go cache) |
 | `cdpath <show\|scan\|add\|rm>` | manage CDPATH entries in `site.sh` |
 | `mkcd <dir>` | mkdir + cd in one step |
 | `up [n]` | go up n directory levels |

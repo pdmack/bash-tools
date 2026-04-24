@@ -37,14 +37,27 @@ cdf() {
     done
 
     local matches=()
-    # -prune stops descent into matched dirs; hidden exclusion uses ( -name ".*" -prune ) -o
-    # so hidden dirs are pruned rather than just filtered, which avoids traversing .git etc.
+
+    # Build prune list: hidden dirs always pruned (unless --hidden), plus non-project dirs.
+    # macOS: also prune Library and Applications which contain huge non-project subtrees.
+    # User can extend via BASH_TOOLS_CDF_PRUNE (space-separated names) in site.sh.
+    local -a prune_names=()
+    $hidden || prune_names+=(".*")
+    prune_names+=("node_modules" "site-packages")
+    [[ "$(uname -s)" == "Darwin" ]] && prune_names+=("Library" "Applications")
+    [[ -n "${BASH_TOOLS_CDF_PRUNE:-}" ]] && read -ra _extra <<< "$BASH_TOOLS_CDF_PRUNE" && prune_names+=("${_extra[@]}")
+
+    # Build: '(' -name n1 -o -name n2 ... ')' -prune -o '(' -type d -iname "*query*" -print -prune ')'
+    local -a prune_expr=('(')
+    local _n
+    for _n in "${prune_names[@]}"; do
+        (( ${#prune_expr[@]} > 1 )) && prune_expr+=(-o)
+        prune_expr+=(-name "$_n")
+    done
+    prune_expr+=(')' -prune)
+
     local find_cmd
-    if $hidden; then
-        find_cmd=("$abs_root" -type d -iname "*${query}*" -print -prune)
-    else
-        find_cmd=("$abs_root" '(' -name ".*" -prune ')' -o '(' -type d -iname "*${query}*" -print -prune ')')
-    fi
+    find_cmd=("$abs_root" "${prune_expr[@]}" -o '(' -type d -iname "*${query}*" -print -prune ')')
 
     while IFS= read -r d; do
         matches+=("$d")

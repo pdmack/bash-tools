@@ -1,4 +1,4 @@
-# memback - back up Claude project memories and global config to $MEMBACK_DEST
+# memback - back up Claude and Codex config and memories to $MEMBACK_DEST
 #
 # Usage: memback [-n|--dry-run]
 #
@@ -12,6 +12,10 @@
 #   3. Copies all *.md files from ~/.claude/projects/*/memory/ into
 #      $MEMBACK_DEST/claude-memories/<project-name>/
 #   4. Saves .meta.json per project with git remote and local path
+#   5. Copies ~/.codex/config.toml and ~/.codex/memories/*.md into
+#      $MEMBACK_DEST/codex-global/
+#   6. Copies user skills from ~/.codex/skills/ (excluding .system/) into
+#      $MEMBACK_DEST/codex-global/skills/
 #   Then commits and pushes. Safe to run repeatedly — only commits when
 #   something changed.
 #
@@ -139,6 +143,8 @@ memback() {
     fi
 
     local copied=0 found=0
+    local codex_dir="$HOME/.codex"
+    local dest_codex="$skills_dir/codex-global"
 
     # 1. Global claude config (~/.claude/*.md and settings.json)
     while IFS= read -r f; do
@@ -215,6 +221,44 @@ memback() {
         fi
     done
 
+    # 3. Codex global config (~/.codex/config.toml)
+    if [[ -f "$codex_dir/config.toml" ]]; then
+        local dst="$dest_codex/config.toml"
+        (( found++ ))
+        if $dry_run; then
+            echo "  $codex_dir/config.toml → $dst"
+        else
+            _memback_cp "$codex_dir/config.toml" "$dst" && (( copied++ ))
+        fi
+    fi
+
+    # 3b. Codex memories (~/.codex/memories/*.md)
+    if [[ -d "$codex_dir/memories" ]]; then
+        while IFS= read -r f; do
+            local dst="$dest_codex/memories/$(basename "$f")"
+            (( found++ ))
+            if $dry_run; then
+                echo "  $f → $dst"
+            else
+                _memback_cp "$f" "$dst" && (( copied++ ))
+            fi
+        done < <(find "$codex_dir/memories" -maxdepth 1 -type f -name "*.md" 2>/dev/null)
+    fi
+
+    # 3c. Codex user skills (~/.codex/skills/, excluding .system/)
+    if [[ -d "$codex_dir/skills" ]]; then
+        while IFS= read -r f; do
+            local rel="${f#$codex_dir/skills/}"
+            local dst="$dest_codex/skills/$rel"
+            (( found++ ))
+            if $dry_run; then
+                echo "  $f → $dst"
+            else
+                _memback_cp "$f" "$dst" && (( copied++ ))
+            fi
+        done < <(find "$codex_dir/skills" -not -path '*/.system/*' -type f 2>/dev/null)
+    fi
+
     if $dry_run; then
         echo "dry run: $found file(s) would be checked"
         return 0
@@ -230,9 +274,9 @@ memback() {
     # Commit and push
     local changed=false
     ! git -C "$skills_dir" diff --quiet && changed=true
-    [[ -n "$(git -C "$skills_dir" ls-files --others --exclude-standard claude-memories/ claude-global/)" ]] && changed=true
+    [[ -n "$(git -C "$skills_dir" ls-files --others --exclude-standard claude-memories/ claude-global/ codex-global/)" ]] && changed=true
     if $changed; then
-        git -C "$skills_dir" add claude-memories/ claude-global/
+        git -C "$skills_dir" add claude-memories/ claude-global/ codex-global/
         git -C "$skills_dir" commit -m "memback: $(date '+%Y-%m-%d %H:%M')"
         git -C "$skills_dir" push
     else

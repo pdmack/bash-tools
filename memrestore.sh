@@ -1,4 +1,4 @@
-# memrestore - restore Claude global config from $MEMBACK_DEST to this machine
+# memrestore - restore Claude and Codex config from $MEMBACK_DEST to this machine
 #
 # Usage: memrestore [-n|--dry-run] [-f|--force] [--platform linux|macos]
 #
@@ -17,6 +17,10 @@
 #   3. For settings.json: rewrites backed-up home path to $HOME; on macOS
 #      also strips Linux-only /proc entries from sandbox.filesystem.denyRead
 #   4. Prompts per project memory, offers git clone for repos not found locally
+#   5. Installs codex-global/config.toml into ~/.codex/ with project path
+#      rewriting (home path transform)
+#   6. Installs codex-global/memories/*.md into ~/.codex/memories/
+#   7. Installs codex-global/skills/ into ~/.codex/skills/ (user skills only)
 #   Prompts before overwriting existing files (--force to skip).
 #
 # Requires memback.sh to be sourced first (uses _memback_project_walk helpers).
@@ -288,6 +292,60 @@ memrestore() {
             echo "    restored $mem_copied/$mem_found file(s) → $target_dir"
             (( installed += mem_copied ))
         done
+    fi
+
+    # Codex config
+    local src_codex="$skills_dir/codex-global"
+    local codex_dir="$HOME/.codex"
+    if [[ -d "$src_codex" ]]; then
+        echo ""
+        echo "memrestore: codex config"
+
+        # config.toml — rewrite home paths in project keys
+        if [[ -f "$src_codex/config.toml" ]]; then
+            if $dry_run; then
+                echo "  $src_codex/config.toml → $codex_dir/config.toml"
+                echo "    transforms: home path → \$HOME"
+            else
+                local tmp
+                tmp=$(mktemp)
+                local old_home_toml
+                old_home_toml=$(grep -oP '(?<=\[projects\.")[^"]*' "$src_codex/config.toml" 2>/dev/null \
+                    | head -1 | grep -oP '^/(home|Users)/[^/]+' || true)
+                if [[ -n "$old_home_toml" && "$old_home_toml" != "$HOME" ]]; then
+                    sed "s|$old_home_toml|$HOME|g" "$src_codex/config.toml" > "$tmp"
+                else
+                    cp "$src_codex/config.toml" "$tmp"
+                fi
+                _memrestore_cp "$tmp" "$codex_dir/config.toml"
+                rm -f "$tmp"
+            fi
+        fi
+
+        # memories/*.md
+        if [[ -d "$src_codex/memories" ]]; then
+            while IFS= read -r f; do
+                local dst="$codex_dir/memories/$(basename "$f")"
+                if $dry_run; then
+                    echo "  $f → $dst"
+                else
+                    _memrestore_cp "$f" "$dst"
+                fi
+            done < <(find "$src_codex/memories" -maxdepth 1 -type f -name "*.md" 2>/dev/null)
+        fi
+
+        # user skills (excluding .system/)
+        if [[ -d "$src_codex/skills" ]]; then
+            while IFS= read -r f; do
+                local rel="${f#$src_codex/skills/}"
+                local dst="$codex_dir/skills/$rel"
+                if $dry_run; then
+                    echo "  $f → $dst"
+                else
+                    _memrestore_cp "$f" "$dst"
+                fi
+            done < <(find "$src_codex/skills" -not -path '*/.system/*' -type f 2>/dev/null)
+        fi
     fi
 
     # Skills directory hint

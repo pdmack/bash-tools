@@ -18,12 +18,13 @@ export CDPATH=".:$HOME/github/pdmack:$HOME/work:$HOME"
 
 ## Tools
 
-### Claude / workflow
+### Claude / Codex / workflow
 | Tool | Description |
 |------|-------------|
 | `cr [name]` | cd to a project and resume its latest Claude session |
-| `memback [-n]` | back up Claude memories, global config, and MCP settings to `$MEMBACK_DEST` |
-| `memrestore [-n] [-f] [--platform linux\|macos]` | restore Claude config from `$MEMBACK_DEST`; prompts per project, offers `git clone` for missing repos |
+| `cxr [name]` | cd to a project and resume its latest Codex session |
+| `memback [-n]` | back up Claude and Codex config, memories, and MCP settings to `$MEMBACK_DEST` |
+| `memrestore [-n] [-f] [--platform linux\|macos]` | restore Claude and Codex config from `$MEMBACK_DEST`; prompts per project, offers `git clone` for missing repos |
 | `ssha [hours] [gl]` | start ssh-agent and load a key (`gl` = gitlab key) |
 | `mkpr` | create a GitHub issue then open a PR referencing it |
 

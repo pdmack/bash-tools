@@ -17,6 +17,7 @@ _bash_tools_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _bash_tools_pre_fns=$(declare -F | awk '{print $3}')
 
 source "$_bash_tools_dir/cr.sh"
+source "$_bash_tools_dir/cxr.sh"
 source "$_bash_tools_dir/ssha.sh"
 source "$_bash_tools_dir/extract.sh"
 source "$_bash_tools_dir/peek.sh"

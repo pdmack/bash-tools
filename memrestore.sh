@@ -21,6 +21,8 @@
 #      rewriting (home path transform)
 #   6. Installs codex-global/memories/*.md into ~/.codex/memories/
 #   7. Installs codex-global/skills/ into ~/.codex/skills/ (user skills only)
+#   8. Restores Claude sessions from sessions.tar.gz per project
+#   9. Restores Codex sessions from codex-global/sessions.tar.gz
 #   Prompts before overwriting existing files (--force to skip).
 #
 # Requires memback.sh to be sourced first (uses _memback_project_walk helpers).
@@ -201,6 +203,23 @@ memrestore() {
 
             local display_name="$project_name"
             (( ${#project_name} > 35 )) && display_name="${project_name:0:34}…"
+
+            # Skip prompt entirely if project exists and all files are up to date
+            if [[ -n "$matched_key" ]]; then
+                local target_check="$claude_dir/projects/$matched_key/memory"
+                local needs_update=false
+                while IFS= read -r f; do
+                    local rel="${f#${memory_src}}"
+                    [[ -f "$target_check/$rel" ]] && cmp -s "$f" "$target_check/$rel" && continue
+                    needs_update=true
+                    break
+                done < <(find "$memory_src" -name "*.md" -type f 2>/dev/null)
+                if ! $needs_update; then
+                    printf "  %-35s up to date\n" "$display_name"
+                    continue
+                fi
+            fi
+
             if [[ -n "$matched_key" ]]; then
                 printf "  %-35s [found]      restore %s file(s)? [Y/n] " "$display_name" "$file_count"
             else
@@ -291,6 +310,21 @@ memrestore() {
 
             echo "    restored $mem_copied/$mem_found file(s) → $target_dir"
             (( installed += mem_copied ))
+
+            # Restore sessions from tar.gz
+            local sessions_archive="$memory_src/sessions.tar.gz"
+            if [[ -f "$sessions_archive" ]]; then
+                local sessions_target
+                sessions_target=$(dirname "$target_dir")
+                if $dry_run; then
+                    echo "    sessions.tar.gz → $sessions_target/"
+                else
+                    mkdir -p "$sessions_target"
+                    tar xzf "$sessions_archive" -C "$sessions_target" 2>/dev/null
+                    echo "    restored sessions → $sessions_target/"
+                    (( installed++ ))
+                fi
+            fi
         done
     fi
 
@@ -332,6 +366,19 @@ memrestore() {
                     _memrestore_cp "$f" "$dst"
                 fi
             done < <(find "$src_codex/memories" -maxdepth 1 -type f -name "*.md" 2>/dev/null)
+        fi
+
+        # sessions
+        if [[ -f "$src_codex/sessions.tar.gz" ]]; then
+            local sessions_dst="$codex_dir/sessions"
+            if $dry_run; then
+                echo "  $src_codex/sessions.tar.gz → $sessions_dst/"
+            else
+                mkdir -p "$sessions_dst"
+                tar xzf "$src_codex/sessions.tar.gz" -C "$sessions_dst" 2>/dev/null
+                echo "  restored codex sessions → $sessions_dst/"
+                (( installed++ ))
+            fi
         fi
 
         # user skills (excluding .system/)

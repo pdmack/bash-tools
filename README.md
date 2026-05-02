@@ -23,8 +23,8 @@ export CDPATH=".:$HOME/github/pdmack:$HOME/work:$HOME"
 |------|-------------|
 | `cr [name]` | cd to a project and resume its latest Claude session |
 | `cxr [name]` | cd to a project and resume its latest Codex session |
-| `memback [-n]` | back up Claude and Codex config, memories, and MCP settings to `$MEMBACK_DEST` |
-| `memrestore [-n] [-f] [--platform linux\|macos]` | restore Claude and Codex config from `$MEMBACK_DEST`; prompts per project, offers `git clone` for missing repos |
+| `memback [-n]` | back up Claude and Codex config, memories, sessions, and MCP settings to `$MEMBACK_DEST`; sessions compressed as tar.gz, most recent N per project (`MEMBACK_SESSION_COUNT`, default 3) |
+| `memrestore [-n] [-f] [--platform linux\|macos]` | restore Claude and Codex config from `$MEMBACK_DEST`; skips up-to-date projects, prompts for changes, offers `git clone` for missing repos |
 | `ssha [hours] [gl]` | start ssh-agent and load a key (`gl` = gitlab key) |
 | `mkpr` | create a GitHub issue then open a PR referencing it |
 

@@ -16,6 +16,11 @@
 #      $MEMBACK_DEST/codex-global/
 #   6. Copies user skills from ~/.codex/skills/ (excluding .system/) into
 #      $MEMBACK_DEST/codex-global/skills/
+#   7. Backs up the most recent N Claude sessions per project as compressed
+#      tar.gz into $MEMBACK_DEST/claude-memories/<project>/sessions.tar.gz
+#   8. Backs up the most recent N Codex sessions as compressed tar.gz into
+#      $MEMBACK_DEST/codex-global/sessions.tar.gz
+#   N defaults to 3, configurable via MEMBACK_SESSION_COUNT in site.sh.
 #   Then commits and pushes. Safe to run repeatedly — only commits when
 #   something changed.
 #
@@ -257,6 +262,70 @@ memback() {
                 _memback_cp "$f" "$dst" && (( copied++ ))
             fi
         done < <(find "$codex_dir/skills" -not -path '*/.system/*' -type f 2>/dev/null)
+    fi
+
+    # 4. Claude sessions — most recent N per project, compressed
+    local session_count="${MEMBACK_SESSION_COUNT:-3}"
+    for project_dir in "$claude_projects"/*/; do
+        [[ -d "$project_dir" ]] || continue
+        local sessions
+        sessions=$(ls -t "$project_dir"*.jsonl 2>/dev/null | head -"$session_count")
+        [[ -z "$sessions" ]] && continue
+
+        local project_key
+        project_key=$(basename "$project_dir")
+        local encoded
+        encoded=$(echo "$project_key" | sed 's/^-home-[^-]*-//')
+        local project_name
+        project_name=$(_memback_project_name "$encoded")
+
+        local dst="$dest_memories/$project_name/sessions.tar.gz"
+        (( found++ ))
+        if $dry_run; then
+            local count
+            count=$(echo "$sessions" | wc -l | tr -d ' ')
+            echo "  $count session(s) → $dst"
+        else
+            local tmp
+            tmp=$(mktemp)
+            tar czf "$tmp" -C "$project_dir" $(echo "$sessions" | xargs -I{} basename {}) 2>/dev/null
+            if [[ -f "$dst" ]] && cmp -s "$tmp" "$dst"; then
+                rm -f "$tmp"
+            else
+                mkdir -p "$(dirname "$dst")"
+                mv "$tmp" "$dst"
+                (( copied++ ))
+            fi
+        fi
+    done
+
+    # 4b. Codex sessions — most recent N, compressed
+    local codex_sessions
+    codex_sessions=$(find "$codex_dir/sessions" -name "*.jsonl" -type f 2>/dev/null | xargs ls -t 2>/dev/null | head -"$session_count")
+    if [[ -n "$codex_sessions" ]]; then
+        local dst="$dest_codex/sessions.tar.gz"
+        (( found++ ))
+        if $dry_run; then
+            local count
+            count=$(echo "$codex_sessions" | wc -l | tr -d ' ')
+            echo "  $count codex session(s) → $dst"
+        else
+            local tmp
+            tmp=$(mktemp)
+            # Store with relative paths from ~/.codex/sessions/
+            local -a rel_paths=()
+            while IFS= read -r s; do
+                rel_paths+=("${s#$codex_dir/sessions/}")
+            done <<< "$codex_sessions"
+            tar czf "$tmp" -C "$codex_dir/sessions" "${rel_paths[@]}" 2>/dev/null
+            if [[ -f "$dst" ]] && cmp -s "$tmp" "$dst"; then
+                rm -f "$tmp"
+            else
+                mkdir -p "$(dirname "$dst")"
+                mv "$tmp" "$dst"
+                (( copied++ ))
+            fi
+        fi
     fi
 
     if $dry_run; then

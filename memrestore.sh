@@ -56,6 +56,28 @@ _memrestore_transform_settings() {
     fi
 }
 
+_memrestore_detect_old_home() {
+    local src_global="$1"
+    local old_home=""
+    if [[ -f "$src_global/settings.json" ]]; then
+        old_home=$(jq -r '
+            (.sandbox.filesystem.denyRead // [])[]
+            | select(test("^/(home|Users)/"))
+            | capture("^(?P<h>/(home|Users)/[^/]+)").h
+        ' "$src_global/settings.json" 2>/dev/null | sort -u | head -1)
+    fi
+    if [[ -z "$old_home" && -f "$src_global/../codex-global/config.toml" ]]; then
+        local _proj_path
+        _proj_path=$(sed -n 's/.*\[projects\."\(\/[^"]*\)".*/\1/p' "$src_global/../codex-global/config.toml" 2>/dev/null | head -1)
+        if [[ "$_proj_path" =~ ^(/home/[^/]+) ]]; then
+            old_home="${BASH_REMATCH[1]}"
+        elif [[ "$_proj_path" =~ ^(/Users/[^/]+) ]]; then
+            old_home="${BASH_REMATCH[1]}"
+        fi
+    fi
+    echo "$old_home"
+}
+
 memrestore() {
     local dry_run=false force=false platform=""
 
@@ -125,6 +147,9 @@ memrestore() {
         fi
     }
 
+    local old_home
+    old_home=$(_memrestore_detect_old_home "$src_global")
+
     echo "memrestore: platform=$platform src=$src_global"
 
     # CLAUDE.md
@@ -134,6 +159,19 @@ memrestore() {
         else
             _memrestore_cp "$src_global/CLAUDE.md" "$claude_dir/CLAUDE.md"
         fi
+    fi
+
+    # Global memories (~/.claude/memory/)
+    if [[ -d "$src_global/memory" ]]; then
+        while IFS= read -r f; do
+            local rel="${f#$src_global/memory/}"
+            local dst="$claude_dir/memory/$rel"
+            if $dry_run; then
+                echo "  $f → $dst"
+            else
+                _memrestore_cp "$f" "$dst"
+            fi
+        done < <(find "$src_global/memory" -type f -name "*.md" 2>/dev/null)
     fi
 
     # .mcp.json (all HTTP URLs — no transform needed)
@@ -319,16 +357,22 @@ memrestore() {
             echo "    restored $mem_copied/$mem_found file(s) → $target_dir"
             (( installed += mem_copied ))
 
-            # Restore sessions from tar.gz
+            # Restore sessions from tar.gz with home path rewriting
             local sessions_archive="$memory_src/sessions.tar.gz"
             if [[ -f "$sessions_archive" ]]; then
                 local sessions_target
                 sessions_target=$(dirname "$target_dir")
                 if $dry_run; then
                     echo "    sessions.tar.gz → $sessions_target/"
+                    [[ -n "$old_home" && "$old_home" != "$HOME" ]] && echo "    transforms: $old_home → $HOME"
                 else
                     mkdir -p "$sessions_target"
                     tar xzf "$sessions_archive" -C "$sessions_target" 2>/dev/null
+                    if [[ -n "$old_home" && "$old_home" != "$HOME" ]]; then
+                        find "$sessions_target" -maxdepth 1 -name "*.jsonl" -type f -exec \
+                            sed -i.bak "s|$old_home|$HOME|g" {} + 2>/dev/null
+                        find "$sessions_target" -name "*.jsonl.bak" -delete 2>/dev/null
+                    fi
                     echo "    restored sessions → $sessions_target/"
                     (( installed++ ))
                 fi
@@ -382,14 +426,20 @@ memrestore() {
             done < <(find "$src_codex/memories" -maxdepth 1 -type f -name "*.md" 2>/dev/null)
         fi
 
-        # sessions
+        # sessions with home path rewriting
         if [[ -f "$src_codex/sessions.tar.gz" ]]; then
             local sessions_dst="$codex_dir/sessions"
             if $dry_run; then
                 echo "  $src_codex/sessions.tar.gz → $sessions_dst/"
+                [[ -n "$old_home" && "$old_home" != "$HOME" ]] && echo "    transforms: $old_home → $HOME"
             else
                 mkdir -p "$sessions_dst"
                 tar xzf "$src_codex/sessions.tar.gz" -C "$sessions_dst" 2>/dev/null
+                if [[ -n "$old_home" && "$old_home" != "$HOME" ]]; then
+                    find "$sessions_dst" -name "*.jsonl" -type f -exec \
+                        sed -i.bak "s|$old_home|$HOME|g" {} + 2>/dev/null
+                    find "$sessions_dst" -name "*.jsonl.bak" -delete 2>/dev/null
+                fi
                 echo "  restored codex sessions → $sessions_dst/"
                 (( installed++ ))
             fi

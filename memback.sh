@@ -6,8 +6,8 @@
 #   export MEMBACK_DEST="$HOME/your-backup-repo"   # root of your backup git repo
 #
 # What it does:
-#   1. Copies ~/.claude/CLAUDE.md and ~/.claude/settings.json into
-#      $MEMBACK_DEST/claude-global/
+#   1. Copies ~/.claude/CLAUDE.md, ~/.claude/settings.json, and
+#      ~/.claude/memory/*.md (global memories) into $MEMBACK_DEST/claude-global/
 #   2. Copies ~/.mcp.json into $MEMBACK_DEST/claude-global/
 #   3. Copies all *.md files from ~/.claude/projects/*/memory/ into
 #      $MEMBACK_DEST/claude-memories/<project-name>/
@@ -161,6 +161,20 @@ memback() {
             _memback_cp "$f" "$dst" && (( copied++ ))
         fi
     done < <(find "$claude_dir" -maxdepth 1 -type f \( -name "*.md" -o -name "settings.json" \) 2>/dev/null)
+
+    # 1a. Global claude memories (~/.claude/memory/*.md)
+    if [[ -d "$claude_dir/memory" ]]; then
+        while IFS= read -r f; do
+            local rel="${f#$claude_dir/memory/}"
+            local dst="$dest_global/memory/$rel"
+            (( found++ ))
+            if $dry_run; then
+                echo "  $f → $dst"
+            else
+                _memback_cp "$f" "$dst" && (( copied++ ))
+            fi
+        done < <(find "$claude_dir/memory" -type f -name "*.md" 2>/dev/null)
+    fi
 
     # 1b. Global MCP config (~/.mcp.json)
     if [[ -f "$HOME/.mcp.json" ]]; then

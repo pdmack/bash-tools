@@ -87,6 +87,14 @@ memrestore() {
         return 1
     fi
 
+    # Pull latest backup before restoring
+    if git -C "$skills_dir" rev-parse --git-dir &>/dev/null; then
+        echo "memrestore: pulling latest from $(git -C "$skills_dir" remote get-url origin 2>/dev/null)..."
+        if ! git -C "$skills_dir" pull --ff-only 2>&1; then
+            echo "memrestore: warning: git pull failed — restoring from local state" >&2
+        fi
+    fi
+
     local src_global="$skills_dir/claude-global"
     if [[ ! -d "$src_global" ]]; then
         echo "memrestore: $src_global not found — run memback on source machine first" >&2

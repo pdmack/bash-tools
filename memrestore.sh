@@ -374,7 +374,7 @@ memrestore() {
                     while IFS= read -r sf; do
                         local sname
                         sname=$(basename "$sf")
-                        if [[ -f "$sessions_target/$sname" ]]; then
+                        if [[ -f "$sessions_target/$sname" ]] && [[ "$sessions_target/$sname" -nt "$sf" ]]; then
                             continue
                         fi
                         if [[ -n "$old_home" && "$old_home" != "$HOME" ]]; then
@@ -454,7 +454,7 @@ memrestore() {
                 while IFS= read -r sf; do
                     local rel="${sf#$tmpdir/}"
                     local dst="$sessions_dst/$rel"
-                    if [[ -f "$dst" ]]; then
+                    if [[ -f "$dst" ]] && [[ "$dst" -nt "$sf" ]]; then
                         continue
                     fi
                     mkdir -p "$(dirname "$dst")"

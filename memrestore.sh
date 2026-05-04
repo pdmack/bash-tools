@@ -357,7 +357,7 @@ memrestore() {
             echo "    restored $mem_copied/$mem_found file(s) → $target_dir"
             (( installed += mem_copied ))
 
-            # Restore sessions from tar.gz with home path rewriting
+            # Restore sessions from tar.gz, skipping those that already exist
             local sessions_archive="$memory_src/sessions.tar.gz"
             if [[ -f "$sessions_archive" ]]; then
                 local sessions_target
@@ -366,15 +366,29 @@ memrestore() {
                     echo "    sessions.tar.gz → $sessions_target/"
                     [[ -n "$old_home" && "$old_home" != "$HOME" ]] && echo "    transforms: $old_home → $HOME"
                 else
+                    local tmpdir
+                    tmpdir=$(mktemp -d)
+                    tar xzf "$sessions_archive" -C "$tmpdir" 2>/dev/null
+                    local s_new=0
                     mkdir -p "$sessions_target"
-                    tar xzf "$sessions_archive" -C "$sessions_target" 2>/dev/null
-                    if [[ -n "$old_home" && "$old_home" != "$HOME" ]]; then
-                        find "$sessions_target" -maxdepth 1 -name "*.jsonl" -type f -exec \
-                            sed -i.bak "s|$old_home|$HOME|g" {} + 2>/dev/null
-                        find "$sessions_target" -name "*.jsonl.bak" -delete 2>/dev/null
+                    while IFS= read -r sf; do
+                        local sname
+                        sname=$(basename "$sf")
+                        if [[ -f "$sessions_target/$sname" ]]; then
+                            continue
+                        fi
+                        if [[ -n "$old_home" && "$old_home" != "$HOME" ]]; then
+                            sed "s|$old_home|$HOME|g" "$sf" > "$sessions_target/$sname"
+                        else
+                            cp "$sf" "$sessions_target/$sname"
+                        fi
+                        (( s_new++ ))
+                    done < <(find "$tmpdir" -name "*.jsonl" -type f 2>/dev/null)
+                    rm -rf "$tmpdir"
+                    if (( s_new > 0 )); then
+                        echo "    restored $s_new new session(s) → $sessions_target/"
+                        (( installed += s_new ))
                     fi
-                    echo "    restored sessions → $sessions_target/"
-                    (( installed++ ))
                 fi
             fi
         done
@@ -426,22 +440,36 @@ memrestore() {
             done < <(find "$src_codex/memories" -maxdepth 1 -type f -name "*.md" 2>/dev/null)
         fi
 
-        # sessions with home path rewriting
+        # sessions, skipping those that already exist
         if [[ -f "$src_codex/sessions.tar.gz" ]]; then
             local sessions_dst="$codex_dir/sessions"
             if $dry_run; then
                 echo "  $src_codex/sessions.tar.gz → $sessions_dst/"
                 [[ -n "$old_home" && "$old_home" != "$HOME" ]] && echo "    transforms: $old_home → $HOME"
             else
-                mkdir -p "$sessions_dst"
-                tar xzf "$src_codex/sessions.tar.gz" -C "$sessions_dst" 2>/dev/null
-                if [[ -n "$old_home" && "$old_home" != "$HOME" ]]; then
-                    find "$sessions_dst" -name "*.jsonl" -type f -exec \
-                        sed -i.bak "s|$old_home|$HOME|g" {} + 2>/dev/null
-                    find "$sessions_dst" -name "*.jsonl.bak" -delete 2>/dev/null
+                local tmpdir
+                tmpdir=$(mktemp -d)
+                tar xzf "$src_codex/sessions.tar.gz" -C "$tmpdir" 2>/dev/null
+                local s_new=0
+                while IFS= read -r sf; do
+                    local rel="${sf#$tmpdir/}"
+                    local dst="$sessions_dst/$rel"
+                    if [[ -f "$dst" ]]; then
+                        continue
+                    fi
+                    mkdir -p "$(dirname "$dst")"
+                    if [[ -n "$old_home" && "$old_home" != "$HOME" ]]; then
+                        sed "s|$old_home|$HOME|g" "$sf" > "$dst"
+                    else
+                        cp "$sf" "$dst"
+                    fi
+                    (( s_new++ ))
+                done < <(find "$tmpdir" -name "*.jsonl" -type f 2>/dev/null)
+                rm -rf "$tmpdir"
+                if (( s_new > 0 )); then
+                    echo "  restored $s_new new codex session(s) → $sessions_dst/"
+                    (( installed += s_new ))
                 fi
-                echo "  restored codex sessions → $sessions_dst/"
-                (( installed++ ))
             fi
         fi
 

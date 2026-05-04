@@ -352,8 +352,14 @@ memrestore() {
                 local tmp
                 tmp=$(mktemp)
                 local old_home_toml
-                old_home_toml=$(grep -oP '(?<=\[projects\.")[^"]*' "$src_codex/config.toml" 2>/dev/null \
-                    | head -1 | grep -oP '^/(home|Users)/[^/]+' || true)
+                local _proj_path
+                _proj_path=$(sed -n 's/.*\[projects\."\(\/[^"]*\)".*/\1/p' "$src_codex/config.toml" 2>/dev/null | head -1)
+                old_home_toml=""
+                if [[ "$_proj_path" =~ ^(/home/[^/]+) ]]; then
+                    old_home_toml="${BASH_REMATCH[1]}"
+                elif [[ "$_proj_path" =~ ^(/Users/[^/]+) ]]; then
+                    old_home_toml="${BASH_REMATCH[1]}"
+                fi
                 if [[ -n "$old_home_toml" && "$old_home_toml" != "$HOME" ]]; then
                     sed "s|$old_home_toml|$HOME|g" "$src_codex/config.toml" > "$tmp"
                 else

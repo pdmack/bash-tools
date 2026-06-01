@@ -250,116 +250,134 @@ memrestore() {
             local display_name="$project_name"
             (( ${#project_name} > 35 )) && display_name="${project_name:0:34}…"
 
-            # Skip prompt entirely if project exists and all files are up to date
+            # Check if memories need updating
+            local memories_up_to_date=false
             if [[ -n "$matched_key" ]]; then
                 local target_check="$claude_dir/projects/$matched_key/memory"
-                local needs_update=false
+                memories_up_to_date=true
                 while IFS= read -r f; do
                     local rel="${f#${memory_src}}"
                     [[ -f "$target_check/$rel" ]] && cmp -s "$f" "$target_check/$rel" && continue
-                    needs_update=true
+                    memories_up_to_date=false
                     break
                 done < <(find "$memory_src" -name "*.md" -type f 2>/dev/null)
-                if ! $needs_update; then
-                    printf "  %-35s up to date\n" "$display_name"
-                    continue
-                fi
             fi
 
-            if [[ -n "$matched_key" ]]; then
-                printf "  %-35s [found]      restore %s file(s)? [Y/n] " "$display_name" "$file_count"
-            else
-                printf "  %-35s [not found]  restore %s file(s)? [y/N] " "$display_name" "$file_count"
-            fi
-
-            if $dry_run; then
-                echo "(dry run)"
-                continue
-            fi
-
-            local ans
-            read -r ans
-            if [[ -n "$matched_key" ]]; then
-                ans="${ans:-y}"
-            else
-                ans="${ans:-n}"
-            fi
-            [[ "$ans" =~ ^[Yy]$ ]] || continue
-
-            # Determine target memory dir
             local target_dir=""
+
+            # Resolve target_dir: either from matched key or by prompting
             if [[ -n "$matched_key" ]]; then
                 target_dir="$claude_dir/projects/$matched_key/memory"
-            else
-                # Try metadata for git clone offer
-                local meta_file="$memory_src/.meta.json"
-                local remote_url="" orig_path=""
-                if [[ -f "$meta_file" ]]; then
-                    remote_url=$(jq -r '.remote_url // ""' "$meta_file")
-                    orig_path=$(jq -r '.local_path // ""' "$meta_file" \
-                        | sed "s|^/home/[^/]*/|$HOME/|; s|^/Users/[^/]*/|$HOME/|")
-                fi
-
-                # Prefer SSH for GitHub/GitLab HTTPS URLs — avoids credential prompts
-                local clone_url="$remote_url"
-                if [[ "$clone_url" =~ ^https://github\.com/(.+)$ ]]; then
-                    clone_url="git@github.com:${BASH_REMATCH[1]}"
-                elif [[ "$clone_url" =~ ^https://gitlab\.com/(.+)$ ]]; then
-                    clone_url="git@gitlab.com:${BASH_REMATCH[1]}"
-                fi
-
-                local proj_path=""
-                if [[ -n "$clone_url" && -n "$orig_path" ]]; then
-                    printf "    clone %s\n    → %s? [Y/n] " "$clone_url" "$orig_path"
-                    local clone_ans
-                    read -r clone_ans
-                    clone_ans="${clone_ans:-y}"
-                    if [[ "$clone_ans" =~ ^[Yy]$ ]]; then
-                        mkdir -p "$(dirname "$orig_path")"
-                        if git clone "$clone_url" "$orig_path"; then
-                            proj_path="$orig_path"
-                        else
-                            echo "    clone failed — skipped" >&2
-                            continue
+                if $memories_up_to_date; then
+                    printf "  %-35s up to date\n" "$display_name"
+                else
+                    printf "  %-35s [found]      restore %s file(s)? [Y/n] " "$display_name" "$file_count"
+                    if $dry_run; then
+                        echo "(dry run)"
+                    else
+                        local ans
+                        read -r ans
+                        ans="${ans:-y}"
+                        if [[ "$ans" =~ ^[Yy]$ ]]; then
+                            local mem_found=0 mem_copied=0
+                            while IFS= read -r f; do
+                                local rel="${f#${memory_src}}"
+                                local dst="$target_dir/$rel"
+                                (( mem_found++ ))
+                                if [[ -f "$dst" ]] && cmp -s "$f" "$dst"; then
+                                    continue
+                                fi
+                                mkdir -p "$(dirname "$dst")"
+                                if cp "$f" "$dst" 2>/dev/null; then
+                                    (( mem_copied++ ))
+                                else
+                                    echo "    ERROR: failed to write $dst" >&2
+                                fi
+                            done < <(find "$memory_src" -name "*.md" -type f 2>/dev/null)
+                            echo "    restored $mem_copied/$mem_found file(s) → $target_dir"
+                            (( installed += mem_copied ))
                         fi
                     fi
                 fi
+            else
+                printf "  %-35s [not found]  restore %s file(s)? [y/N] " "$display_name" "$file_count"
+                if $dry_run; then
+                    echo "(dry run)"
+                else
+                    local ans
+                    read -r ans
+                    ans="${ans:-n}"
+                    if [[ "$ans" =~ ^[Yy]$ ]]; then
+                        local meta_file="$memory_src/.meta.json"
+                        local remote_url="" orig_path=""
+                        if [[ -f "$meta_file" ]]; then
+                            remote_url=$(jq -r '.remote_url // ""' "$meta_file")
+                            orig_path=$(jq -r '.local_path // ""' "$meta_file" \
+                                | sed "s|^/home/[^/]*/|$HOME/|; s|^/Users/[^/]*/|$HOME/|")
+                        fi
 
-                if [[ -z "$proj_path" ]]; then
-                    printf "    path on this machine (e.g. %s/github/pdmack/%s): " "$HOME" "$project_name"
-                    read -r proj_path
+                        local clone_url="$remote_url"
+                        if [[ "$clone_url" =~ ^https://github\.com/(.+)$ ]]; then
+                            clone_url="git@github.com:${BASH_REMATCH[1]}"
+                        elif [[ "$clone_url" =~ ^https://gitlab\.com/(.+)$ ]]; then
+                            clone_url="git@gitlab.com:${BASH_REMATCH[1]}"
+                        fi
+
+                        local proj_path=""
+                        if [[ -n "$clone_url" && -n "$orig_path" ]]; then
+                            printf "    clone %s\n    → %s? [Y/n] " "$clone_url" "$orig_path"
+                            local clone_ans
+                            read -r clone_ans
+                            clone_ans="${clone_ans:-y}"
+                            if [[ "$clone_ans" =~ ^[Yy]$ ]]; then
+                                mkdir -p "$(dirname "$orig_path")"
+                                if git clone "$clone_url" "$orig_path"; then
+                                    proj_path="$orig_path"
+                                else
+                                    echo "    clone failed — skipped" >&2
+                                    continue
+                                fi
+                            fi
+                        fi
+
+                        if [[ -z "$proj_path" ]]; then
+                            printf "    path on this machine (e.g. %s/github/pdmack/%s): " "$HOME" "$project_name"
+                            read -r proj_path
+                        fi
+                        if [[ -z "$proj_path" ]]; then
+                            echo "    skipped"
+                            continue
+                        fi
+                        local encoded_key
+                        encoded_key=$(echo "$proj_path" | sed 's|/|-|g')
+                        target_dir="$claude_dir/projects/$encoded_key/memory"
+
+                        local mem_found=0 mem_copied=0
+                        while IFS= read -r f; do
+                            local rel="${f#${memory_src}}"
+                            local dst="$target_dir/$rel"
+                            (( mem_found++ ))
+                            if [[ -f "$dst" ]] && cmp -s "$f" "$dst"; then
+                                continue
+                            fi
+                            mkdir -p "$(dirname "$dst")"
+                            if cp "$f" "$dst" 2>/dev/null; then
+                                (( mem_copied++ ))
+                            else
+                                echo "    ERROR: failed to write $dst" >&2
+                            fi
+                        done < <(find "$memory_src" -name "*.md" -type f 2>/dev/null)
+                        echo "    restored $mem_copied/$mem_found file(s) → $target_dir"
+                        (( installed += mem_copied ))
+                    else
+                        continue
+                    fi
                 fi
-                if [[ -z "$proj_path" ]]; then
-                    echo "    skipped"
-                    continue
-                fi
-                local encoded_key
-                encoded_key=$(echo "$proj_path" | sed 's|/|-|g')
-                target_dir="$claude_dir/projects/$encoded_key/memory"
             fi
 
-            local mem_found=0 mem_copied=0
-            while IFS= read -r f; do
-                local rel="${f#${memory_src}}"
-                local dst="$target_dir/$rel"
-                (( mem_found++ ))
-                if [[ -f "$dst" ]] && cmp -s "$f" "$dst"; then
-                    continue
-                fi
-                mkdir -p "$(dirname "$dst")"
-                if cp "$f" "$dst" 2>/dev/null; then
-                    (( mem_copied++ ))
-                else
-                    echo "    ERROR: failed to write $dst" >&2
-                fi
-            done < <(find "$memory_src" -name "*.md" -type f 2>/dev/null)
-
-            echo "    restored $mem_copied/$mem_found file(s) → $target_dir"
-            (( installed += mem_copied ))
-
-            # Restore sessions from tar.gz, skipping those that already exist
+            # Sessions — always restore regardless of memory state
             local sessions_archive="$memory_src/sessions.tar.gz"
-            if [[ -f "$sessions_archive" ]]; then
+            if [[ -f "$sessions_archive" && -n "$target_dir" ]]; then
                 local sessions_target
                 sessions_target=$(dirname "$target_dir")
                 if $dry_run; then

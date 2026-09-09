@@ -25,24 +25,34 @@ cr() {
             [[ "$d" = /* ]] && search_dirs+=("$d") || search_dirs+=("$HOME/${d#./}")
         done
 
-        local matches=() seen_real=()
+        local matches=() labels=() seen_real=()
         for dir in "${search_dirs[@]}"; do
             [[ -d "$dir" ]] || continue
             while IFS= read -r d; do
                 local base real
                 base=$(basename "$d")
+                [[ "$base" == .* ]] && continue
                 real=$(realpath "$d" 2>/dev/null || echo "$d")
                 if [[ "${base,,}" == *"${query,,}"* ]]; then
-                    # skip duplicates (e.g. ./foo vs /abs/path/foo from CDPATH)
                     local dup=false
                     for s in "${seen_real[@]}"; do [[ "$s" == "$real" ]] && dup=true && break; done
-                    $dup || { matches+=("$real"); seen_real+=("$real"); }
+                    $dup && continue
+                    local project_key="${real//\//-}"
+                    local claude_dir="$HOME/.claude/projects/${project_key}"
+                    ls "$claude_dir"/*.jsonl &>/dev/null || continue
+                    seen_real+=("$real")
+                    matches+=("$real")
+                    local label="${real#"$dir/"}"
+                    [[ "$label" == "$real" ]] && label="$base"
+                    local parent_name
+                    parent_name=$(basename "$dir")
+                    labels+=("${parent_name}/${label}")
                 fi
             done < <(find "$dir" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort)
         done
 
         if (( ${#matches[@]} == 0 )); then
-            echo "cr: no project found matching '$query'" >&2
+            echo "cr: no project with Claude sessions matching '$query'" >&2
             return 1
         elif (( ${#matches[@]} == 1 )); then
             match="${matches[0]}"
@@ -50,7 +60,7 @@ cr() {
             echo "Multiple matches:"
             local i
             for i in "${!matches[@]}"; do
-                printf "  [%d] %s\n" "$i" "${matches[$i]}"
+                printf "  [%d] %s\n" "$i" "${labels[$i]}"
             done
             echo
             read -r -p "Pick a number: " pick

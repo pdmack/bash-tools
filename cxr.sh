@@ -24,17 +24,26 @@ cxr() {
             [[ "$d" = /* ]] && search_dirs+=("$d") || search_dirs+=("$HOME/${d#./}")
         done
 
-        local matches=() seen_real=()
+        local matches=() labels=() seen_real=()
         for dir in "${search_dirs[@]}"; do
             [[ -d "$dir" ]] || continue
             while IFS= read -r d; do
                 local base real
                 base=$(basename "$d")
+                [[ "$base" == .* ]] && continue
                 real=$(realpath "$d" 2>/dev/null || echo "$d")
                 if [[ "${base,,}" == *"${query,,}"* ]]; then
                     local dup=false
                     for s in "${seen_real[@]}"; do [[ "$s" == "$real" ]] && dup=true && break; done
-                    $dup || { matches+=("$real"); seen_real+=("$real"); }
+                    $dup && continue
+                    [[ -d "$real/.git" ]] || continue
+                    seen_real+=("$real")
+                    matches+=("$real")
+                    local label="${real#"$dir/"}"
+                    [[ "$label" == "$real" ]] && label="$base"
+                    local parent_name
+                    parent_name=$(basename "$dir")
+                    labels+=("${parent_name}/${label}")
                 fi
             done < <(find "$dir" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort)
         done
@@ -48,7 +57,7 @@ cxr() {
             echo "Multiple matches:"
             local i
             for i in "${!matches[@]}"; do
-                printf "  [%d] %s\n" "$i" "${matches[$i]}"
+                printf "  [%d] %s\n" "$i" "${labels[$i]}"
             done
             echo
             read -r -p "Pick a number: " pick

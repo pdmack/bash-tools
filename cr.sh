@@ -42,11 +42,9 @@ cr() {
                     ls "$claude_dir"/*.jsonl &>/dev/null || continue
                     seen_real+=("$real")
                     matches+=("$real")
-                    local label="${real#"$dir/"}"
-                    [[ "$label" == "$real" ]] && label="$base"
-                    local parent_name
-                    parent_name=$(basename "$dir")
-                    labels+=("${parent_name}/${label}")
+                    local label="${real#"$HOME/"}"
+                    [[ "$label" != "$real" ]] && label="~/$label" || label="$base"
+                    labels+=("$label")
                 fi
             done < <(find "$dir" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort)
         done

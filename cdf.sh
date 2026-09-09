@@ -69,9 +69,13 @@ cdf() {
     elif (( ${#matches[@]} == 1 )); then
         cd "${matches[0]}"
     else
-        local i
+        local i label prefix="${abs_root%/}/"
+        local tilde_prefix="${prefix#"$HOME/"}"
+        [[ "$tilde_prefix" != "$prefix" ]] && tilde_prefix="~/$tilde_prefix" || tilde_prefix=""
         for i in "${!matches[@]}"; do
-            printf "  [%d] %s\n" "$i" "${matches[$i]}"
+            label="${matches[$i]#"$prefix"}"
+            [[ -n "$tilde_prefix" ]] && label="${tilde_prefix}${label}"
+            printf "  [%d] %s\n" "$i" "$label"
         done
         echo
         read -r -p "Pick a number: " pick

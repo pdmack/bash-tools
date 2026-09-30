@@ -37,7 +37,7 @@ cr() {
                     local dup=false
                     for s in "${seen_real[@]}"; do [[ "$s" == "$real" ]] && dup=true && break; done
                     $dup && continue
-                    local project_key="${real//\//-}"
+                    local project_key="${real//[^a-zA-Z0-9]/-}"
                     local claude_dir="$HOME/.claude/projects/${project_key}"
                     ls "$claude_dir"/*.jsonl &>/dev/null || continue
                     seen_real+=("$real")

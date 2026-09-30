@@ -70,7 +70,8 @@ cr() {
         fi
     fi
 
-    local project_key="${match//\//-}"
+    # Claude derives the project key by replacing every non-alphanumeric char with "-"
+    local project_key="${match//[^a-zA-Z0-9]/-}"
     local claude_dir="$HOME/.claude/projects/${project_key}"
 
     if [[ ! -d "$claude_dir" ]]; then
